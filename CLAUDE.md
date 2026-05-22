@@ -32,10 +32,11 @@ Key tools for object manipulation:
 - `move_object()` - Reposition object
 - `autofit_existing()` - Apply auto-fit to existing object
 
-M4L parameter introspection (read-only):
+M4L parameter introspection (read + write):
 - `get_object_attributes(varname)` - now also returns a `parameter_info` sub-dict for parameter-enabled boxes
 - `get_parameter_info(varname)` - narrow read of just the `_parameter_*` metadata
 - `list_parameters()` - enumerate every Live parameter in the current patcher
+- `set_parameter_property(varname, key, value)` - write an `_parameter_*` attribute (whitelisted keys; persists to `.amxd` after Cmd+S)
 
 These surface `_parameter_shortname`, `_parameter_longname`, `_parameter_type`, `_parameter_range`, `_parameter_modmode`, etc. — the M4L attrs that `getattrnames()` hides.
 

@@ -106,15 +106,82 @@ These are observations from the debug cycle that are worth filing but out of sco
 | Path | Status |
 |------|--------|
 | `get_object_attributes(varname)` augmentation | ✅ Verified end-to-end with `riseDial` (live.dial, parameter-enabled) — returned correct `parameter_info`. Edge cases verified: `uiLblPort` (live.comment, no params) and `obj-23` (scale, plain object) correctly omit `parameter_info`. |
-| `get_parameter_info(varname)` | ⚠ Code in place; not yet tested via MCP. The Python MCP server needs a restart for the new tool schema to register. The underlying helper is the same one used by the verified `get_object_attributes` augmentation. |
-| `list_parameters()` | ⚠ Same as above — code in place, not yet tested via MCP. Uses `current_patcher.apply(...)` which is the standard iteration pattern used elsewhere in the file. |
+| `get_parameter_info(varname)` | ✅ Used in iteration 2 to verify the write side's readback. Confirmed working on `riseDial`. |
+| `list_parameters()` | ⚠ Code in place; not yet exercised via MCP, but shares the same helper that the verified paths use. Uses `current_patcher.apply(...)` which is the standard iteration pattern used elsewhere in the file. |
 
-To finish testing the two new tools: restart the MCP server (cycle Claude Code or re-register), then call `get_parameter_info("riseDial")` and `list_parameters()` in a session with `Everest_OSC.amxd` (or any M4L device) as the current patcher.
+---
+
+# Iteration 2 — Parameter writes (`set_parameter_property`)
+
+## Branch
+
+`set_param_property` — branched from `main` at the merge of `full_param_access` (commit `125da8f`).
+
+## Goal
+
+Write access to the same `_parameter_*` family iteration 1 made readable. Lets agents programmatically set device-strip shortnames, automation longnames, ranges, modulation modes, etc. without leaving the chat.
+
+## Empirical finding that drove the design
+
+`obj.setattr("_parameter_shortname", "RiseTest")` on a `live.dial` WORKS — both updates runtime state and persists to the saved `.amxd` after Cmd+S (verified by grep on the binary file). The prior [`maxmsp-mcp-tool-reliability`](file:///Users/alexandrev/.claude/projects/-Users-alexandrev-max-files/memory/maxmsp-mcp-tool-reliability.md) memory's "silently fails" observations were on the **non-underscore** form (`parameter_shortname`) and/or on `function`/`live.tab` objects — different surface, didn't generalize.
+
+The probe (since removed) tried 5 mechanisms in sequence: `setattr`, `obj.message(key, value)` with underscore key, `obj.message(key_no_underscore, value)`, direct JS property assignment, and `obj.message("attr_set", key, value)`. `setattr` worked on attempt 1; subsequent mechanisms ran on the already-set value (inconclusive but unneeded). On-disk persistence confirmed by `grep -ao '"parameter_shortname": "ProbeTest"' Everest_OSC.amxd` after Cmd+S.
+
+Note: Max stores the saved attribute under the **non-underscore** name (`parameter_shortname`) in the JSON, but the JS API uses the **underscore** form (`_parameter_shortname`) for both `getattr` and `setattr`. Both name spaces map to the same backing storage.
+
+## Files changed (iteration 2)
+
+### `server.py`
+
+| Location | Change |
+|----------|--------|
+| New tool: `set_parameter_property(varname, key, value)` (after `list_parameters`) | Async wrapper sending `{"action": "set_parameter_property", "varname": ..., "key": ..., "value": [...]}`. Returns `{varname, key, requested_value, applied_value, actual_value, success, threw, error, note}`. Value is always a list (matches `set_object_attribute` pattern); v8 unwraps single-element lists before calling setattr. |
+
+### `MaxMSP_Agent/max_mcp.js`
+
+| Location | Change |
+|----------|--------|
+| Dispatcher: new case `set_parameter_property` | Forwards to v8 via `outlet(2, ...)`. Crucially **JSON-stringifies the value** before forwarding, so lists / nested types survive the Max outlet symbol boundary. v8 parses back on receipt. |
+
+### `MaxMSP_Agent/max_mcp_v8_add_on.js`
+
+| Location | Change |
+|----------|--------|
+| Dispatcher: new case `set_parameter_property` | Parses the JSON-stringified `value` arg back into a JS value before calling `set_parameter_property_v8`. |
+| `SETTABLE_PARAM_KEYS` constant | Whitelist of allowed keys = `PARAM_INFO_KEYS` (the iteration-1 read list) plus `parameter_enable` and `parameter_mappable`. Anything else → structured error pointing at `set_object_attribute`. |
+| `set_parameter_property_v8(request_id, varname, key, value)` | Single function. Validates key against whitelist; looks up box; unwraps single-element lists; calls `obj.setattr(key, setval)` in a try/catch; reads back via `obj.getattr(key)`; returns `success=true` iff the readback matches the applied value. Includes a `note` field reminding the caller to Cmd+S to persist. |
+
+### `README.md`
+
+- "New MCP tools (+2)" → "(+3)" with `set_parameter_property` added.
+- Object Properties table gets a new row.
+
+### `CLAUDE.md`
+
+- Added `set_parameter_property` to the M4L parameter-introspection list.
+
+### `CHANGES.md` (this file)
+
+- This Iteration 2 section.
+
+## Probe code (temporary, removed)
+
+`probe_parameter_write(varname, key, test_value)` existed during development to find the working mechanism. Removed before commit. The findings are baked into the implementation above.
+
+## Test status (iteration 2)
+
+| Path | Status |
+|------|--------|
+| `set_parameter_property` happy path | ✅ Verified `set_parameter_property("riseDial", "_parameter_shortname", ["RiseTest"])` → `success: true`, `applied_value: "RiseTest"`, `actual_value: "RiseTest"`. |
+| Whitelist | ✅ Verified `set_parameter_property("riseDial", "not_a_real_key", ["x"])` rejected with a structured error listing the allowed keys. |
+| Disk persistence | ✅ Verified earlier in the probe phase: `setattr("_parameter_shortname", "ProbeTest")` + Cmd+S produced a `.amxd` whose embedded JSON contained `"parameter_shortname": "ProbeTest"` (matched via `grep -ao` on the binary file). The set tool uses the same code path. |
+| Other `_parameter_*` keys (range, modmode, initial, etc.) | ⚠ Not individually verified — only `_parameter_shortname` was exercised end-to-end. The setattr code path is uniform, but quirks per key are possible (e.g., `_parameter_range` for Enum types is a list, not `[min, max]`). |
 
 ---
 
 ## Future work suggested
 
-- Set/write side: an analogous `set_parameter_property(varname, key, value)`. Per the upstream gap log, `set_object_attribute("_parameter_*", ...)` silently fails — likely needs a different Max API (message-based attribute setting, e.g. `obj.message("_parameter_shortname", value)`). Worth a follow-up probe.
 - Augment `get_objects_in_patch` to also include `parameter_info` per box — would make patch dumps self-describing for M4L work. Trivial extension once the helper is in v8.
-- Fix the v8 nav-sync silent-failure (item 1 above). Could send the patcher's filepath in addition to its name and have v8 cross-check against `parentpatcher` walks before giving up.
+- Fix the v8 nav-sync silent-failure (Known Issues item 1). Each iteration costs ~30 seconds of "click Everest_OSC to front" workaround. Could send the patcher's filepath in addition to its name and have v8 cross-check against `parentpatcher` walks before giving up.
+- Exercise the remaining `_parameter_*` write keys (ranges, modmode, initial, units) and confirm each persists. Likely all work the same way, but worth a quick batch test before relying on them.
+- `set_parameter_properties_batch(varname, dict)` — convenience tool that takes a dict of key/value pairs and applies them in one round trip. Useful when reconfiguring a parameter wholesale.
