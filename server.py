@@ -682,12 +682,19 @@ async def get_objects_in_selected(
 
 @mcp.tool()
 async def get_object_attributes(ctx: Context, varname: str):
-    """Retrieve an objects' attributes and values of the attributes.
+    """Retrieve an object's attributes and values of the attributes.
 
-    Use this to understand the state of an object.
+    For boxes with parameter_enable=1 (M4L Live parameters: live.dial, live.numbox,
+    live.text, live.tab, etc.), the response also includes a `parameter_info` key
+    with the full M4L parameter metadata (_parameter_shortname, _parameter_longname,
+    _parameter_type, _parameter_range, _parameter_initial, _parameter_modmode, etc.).
+    These _parameter_* attributes are NOT in the box's normal getattrnames() list, so
+    this is the only way to read them via attribute introspection. See get_parameter_info
+    for a narrow tool that returns ONLY the parameter info.
 
     Returns:
-        list: A list of attributes name and attributes values.
+        dict: Attribute name → value, plus a `parameter_info` sub-dict if the box is
+              a Live parameter.
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
     payload = {"action": "get_object_attributes"}
@@ -696,6 +703,64 @@ async def get_object_attributes(ctx: Context, varname: str):
     response = await maxmsp.send_request(payload)
 
     return [response]
+
+
+@mcp.tool()
+async def get_parameter_info(ctx: Context, varname: str):
+    """Get Max for Live parameter metadata for a single box.
+
+    Returns the M4L parameter attributes (_parameter_shortname, _parameter_longname,
+    _parameter_type, _parameter_range, _parameter_initial, _parameter_modmode, etc.)
+    that determine how the control appears in Ableton Live (device-strip name,
+    automation label, value range, modulation behavior, etc.). These attributes are
+    hidden from getattrnames() and are only readable by name; this tool surfaces
+    them in one call.
+
+    Use this when verifying or comparing parameter wiring on live.* objects without
+    pulling the full attribute dump (use get_object_attributes if you also want the
+    box's UI attrs like colors and position).
+
+    _parameter_type values: 0=Int, 1=Float, 2=Enum, 3=Blob.
+    For type 2 (Enum), _parameter_range is the list of enum item names.
+    For types 0/1, _parameter_range is [min, max].
+
+    Args:
+        varname (str): Variable name of the box (must already have a scripting name).
+
+    Returns:
+        dict: {
+            "varname": str,
+            "maxclass": str,
+            "is_parameter": bool,
+            "parameter_info": dict | None  # null if parameter_enable != 1
+        }
+    """
+    maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
+    payload = {"action": "get_parameter_info", "varname": varname}
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
+
+
+@mcp.tool()
+async def list_parameters(ctx: Context):
+    """Enumerate every Max for Live parameter in the current patcher.
+
+    Iterates every box and returns one entry per parameter-enabled box
+    (parameter_enable=1). Each entry contains varname, maxclass, and the full
+    parameter_info (same shape as get_parameter_info). Boxes without scripting
+    names are skipped (they can't be referenced by other tools anyway).
+
+    Use this to audit which controls in a device are wired as Live parameters
+    and what their metadata looks like — useful for verifying device strip names,
+    automation labels, ranges, modulation modes across a whole device at once.
+
+    Returns:
+        dict: {"parameters": [{varname, maxclass, parameter_info}, ...], "count": int}
+    """
+    maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
+    payload = {"action": "list_parameters"}
+    response = await maxmsp.send_request(payload, timeout=10.0)
+    return response
 
 
 @mcp.tool()

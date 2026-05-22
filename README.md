@@ -1,14 +1,42 @@
-# MaxMSP-MCP Server (Extended Fork)
+# MaxMSP-MCP Server (Personal Fork — M4L Parameter Access)
 
 This project uses the [Model Context Protocol](https://modelcontextprotocol.io/introduction) (MCP) to let LLMs directly understand and generate Max patches.
 
-> **Fork Notice**: This is an extended fork of the original [MaxMSP-MCP-Server](https://github.com/tiianhk/MaxMSP-MCP-Server) by Haokun Tian and Shuoyang Zheng. See [Acknowledgements](#acknowledgements) for details.
+> **Fork heritage** (top of stack first):
+> - **This fork** — adds M4L parameter introspection ([details below](#this-forks-additions-m4l-parameter-access) and in [`CHANGES.md`](CHANGES.md)).
+> - **Upstream** — [ersatzben/maxmsp-mcp](https://github.com/ersatzben/maxmsp-mcp): added subpatcher navigation, encapsulation, signal-safety analysis, and a dozen other tools. The "Upstream fork additions" section below is their work.
+> - **Original** — [tiianhk/MaxMSP-MCP-Server](https://github.com/tiianhk/MaxMSP-MCP-Server) by Haokun Tian and Shuoyang Zheng. See [Acknowledgements](#acknowledgements).
 
-## What's New in This Fork
+---
 
-This fork significantly extends the original with new tools, safety features, and Claude Code integration:
+## This fork's additions (M4L parameter access)
 
-### New MCP Tools (+11)
+The `_parameter_*` family of attributes — `_parameter_shortname`, `_parameter_longname`, `_parameter_type`, `_parameter_range`, `_parameter_initial`, `_parameter_modmode`, etc. — controls how a `live.*` control appears in Ableton Live (device-strip name, automation label, value range, modulation behaviour). These attributes are **hidden from `getattrnames()`** in Max, so previous tools couldn't read them. This fork adds tools that surface them, plus an additive change to `get_object_attributes`.
+
+See [`CHANGES.md`](CHANGES.md) for the file-by-file breakdown of what changed and where.
+
+### New MCP tools (+2)
+
+| Tool | Description |
+|------|-------------|
+| `get_parameter_info(varname)` | Read M4L `_parameter_*` metadata for a single box. Returns `is_parameter: false` if the box has `parameter_enable=0`. |
+| `list_parameters()` | Enumerate every Live parameter in the current patcher. Returns one entry per parameter-enabled box. |
+
+### Changed tools
+
+| Tool | Change |
+|------|--------|
+| `get_object_attributes(varname)` | Response now includes a `parameter_info` sub-dict for boxes with `parameter_enable=1`. Pure additive — existing consumers see the same fields plus the new one. |
+
+`_parameter_type` values: `0`=Int, `1`=Float, `2`=Enum (where `_parameter_range` is the list of enum item names), `3`=Blob.
+
+---
+
+## Upstream fork additions (ersatzben)
+
+The ersatzben fork significantly extends the original with new tools, safety features, and Claude Code integration. The items below are their work, not this fork's.
+
+### Tools added by upstream (+11)
 
 | Tool | Description |
 |------|-------------|
@@ -198,11 +226,22 @@ Once connected, the LLM can explain, modify, or create Max objects within the pa
 |------|-------------|
 | `get_objects_in_patch()` | Get all objects and connections |
 | `get_objects_in_selected()` | Get selected objects |
-| `get_object_attributes(varname)` | Get object's attributes |
+| `get_object_attributes(varname)` | Get object's attributes (plus `parameter_info` for M4L parameters) |
+| `get_parameter_info(varname)` | Read M4L `_parameter_*` metadata for a single box |
+| `list_parameters()` | Enumerate every M4L parameter in the current patcher |
 | `get_object_connections(varname)` | Get object's connections |
 | `get_avoid_rect_position()` | Get bounding box for placement |
 | `list_all_objects()` | List available Max objects |
 | `get_object_doc(name)` | Get Max documentation |
+
+**M4L parameter introspection.** The `_parameter_*` family of attributes
+(`_parameter_shortname`, `_parameter_longname`, `_parameter_type`, `_parameter_range`,
+`_parameter_initial`, `_parameter_modmode`, etc.) is **not enumerated by
+`getattrnames()`** in Max — these attributes are hidden from the standard attribute
+list. The tools above read them by name, surfacing the metadata that controls how a
+`live.*` control appears in Ableton Live (device-strip name, automation label, value
+range, modulation behaviour). `_parameter_type` is `0`=Int, `1`=Float, `2`=Enum
+(where `_parameter_range` is the list of enum item names), `3`=Blob.
 
 ### Subpatcher Navigation
 
@@ -235,7 +274,10 @@ After making code changes:
 
 ## Acknowledgements
 
-This fork is based on the original [MaxMSP-MCP-Server](https://github.com/tiianhk/MaxMSP-MCP-Server) created by **Haokun Tian** and **Shuoyang Zheng**.
+This fork builds on prior work:
+
+- The **original** [MaxMSP-MCP-Server](https://github.com/tiianhk/MaxMSP-MCP-Server) created by **Haokun Tian** and **Shuoyang Zheng**.
+- The **ersatzben fork** ([ersatzben/maxmsp-mcp](https://github.com/ersatzben/maxmsp-mcp)) — added the subpatcher / safety / encapsulation tool layer this fork now extends.
 
 The original project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
 
