@@ -123,6 +123,20 @@ function anything() {
                 outlet(0, "error", "Missing request_id or varname for get_object_attributes");
             }
             break;
+        case "get_parameter_info":
+            if (data.request_id && data.varname) {
+                outlet(2, "get_parameter_info", data.request_id, data.varname);
+            } else {
+                outlet(0, "error", "Missing request_id or varname for get_parameter_info");
+            }
+            break;
+        case "list_parameters":
+            if (data.request_id) {
+                outlet(2, "list_parameters", data.request_id);
+            } else {
+                outlet(0, "error", "Missing request_id for list_parameters");
+            }
+            break;
         case "get_avoid_rect_position":
             if (data.request_id) {
                 get_avoid_rect_position(data.request_id);
@@ -1056,28 +1070,11 @@ function collect_objects(obj) {
 }
 
 function get_object_attributes(request_id, var_name) {
-    var obj = current_patcher.getnamed(var_name);
-    if (!obj) {
-        post("Object not found: " + var_name);
-	    return;
-    }
-    var attrnames = obj.getattrnames();
-    var attributes = {};
-    if (attrnames.length){
-        for (var i = 0; i < attrnames.length; i++) {
-            var name = attrnames[i];
-            var value = obj.getattr(name);
-            attributes[name] = value;
-        }
-    }
-
-    // use these if no v8:
-    // var results = {"request_id": request_id, "results": patcher_dict}
-    // outlet(1, "response", split_long_string(JSON.stringify(results, null, 2), 2000));
-
-    // use this if has v8:
-    var results = {"request_id": request_id, "results": attributes}
-    outlet(1, "response", split_long_string(JSON.stringify(results, null, 0), 2500));
+    // Routed to v8 add-on. v8 builds the attribute dict AND attaches a
+    // parameter_info sub-dict for boxes with parameter_enable=1 (M4L Live
+    // parameters). The _parameter_* keys are hidden — not enumerated by
+    // getattrnames() — so this path is the only way to surface them.
+    outlet(2, "get_object_attributes", request_id, var_name);
 }
 
 function get_window_rect() {

@@ -94,6 +94,21 @@ function anything() {
                 nav_switch_to_patcher(arguments[0]);
             }
             break;
+        case "get_object_attributes":
+            if (arguments.length >= 2) {
+                get_object_attributes_v8(arguments[0], arguments[1]);
+            }
+            break;
+        case "get_parameter_info":
+            if (arguments.length >= 2) {
+                get_parameter_info_v8(arguments[0], arguments[1]);
+            }
+            break;
+        case "list_parameters":
+            if (arguments.length >= 1) {
+                list_parameters_v8(arguments[0]);
+            }
+            break;
         default:
             // outlet(1, messagename, ...arguments);
             outlet(1, "response", arguments[1]);
@@ -637,4 +652,125 @@ function autofit_v8(var_name) {
     }
 }
 
+// ========================================
+// M4L parameter metadata
+//
+// _parameter_* attributes are NOT enumerated by getattrnames(), but ARE accessible
+// via direct obj.getattr(). Verified empirically against Max 9 on 2026-05-22 with
+// live.dial, live.numbox, live.text. live.comment has no parameter wiring.
+//
+// _parameter_type values: 0=Int, 1=Float, 2=Enum, 3=Blob.
+//   For type 2 (Enum), _parameter_range is the list of enum item names.
+//   For types 0/1, _parameter_range is [min, max].
+
+var PARAM_INFO_KEYS = [
+    "_parameter_shortname",
+    "_parameter_longname",
+    "_parameter_type",
+    "_parameter_range",
+    "_parameter_initial",
+    "_parameter_initial_enable",
+    "_parameter_unitstyle",
+    "_parameter_units",
+    "_parameter_modmode",
+    "_parameter_steps",
+    "_parameter_invisible",
+    "_parameter_exponent",
+    "_parameter_linknames"
+];
+
+// Returns a dict of M4L parameter metadata for a box, or null if the box is
+// not a Live parameter (parameter_enable != 1).
+function build_parameter_info(obj) {
+    var enable = null;
+    try { enable = obj.getattr("parameter_enable"); } catch (e) {}
+    if (!enable) return null;
+
+    var info = { parameter_enable: enable };
+    try {
+        var mappable = obj.getattr("parameter_mappable");
+        if (mappable !== null && mappable !== undefined) info.parameter_mappable = mappable;
+    } catch (e) {}
+
+    for (var i = 0; i < PARAM_INFO_KEYS.length; i++) {
+        var key = PARAM_INFO_KEYS[i];
+        var v;
+        try { v = obj.getattr(key); } catch (e) { v = undefined; }
+        if (v !== null && v !== undefined) {
+            info[key] = v;
+        }
+    }
+    return info;
+}
+
+function get_object_attributes_v8(request_id, var_name) {
+    var obj = current_patcher.getnamed(var_name);
+    if (!obj) {
+        var err = {"request_id": request_id, "results": {"error": "Object not found: " + var_name}};
+        outlet(1, "response", JSON.stringify(err));
+        return;
+    }
+    var attributes = {};
+    try {
+        var attrnames = obj.getattrnames();
+        for (var i = 0; i < attrnames.length; i++) {
+            var name = attrnames[i];
+            attributes[name] = obj.getattr(name);
+        }
+    } catch (e) {
+        // emit whatever we have
+    }
+    var param_info = build_parameter_info(obj);
+    if (param_info) {
+        attributes.parameter_info = param_info;
+    }
+    var results = {"request_id": request_id, "results": attributes};
+    outlet(1, "response", split_long_string(JSON.stringify(results, null, 0), 2500));
+}
+
+function get_parameter_info_v8(request_id, var_name) {
+    var obj = current_patcher.getnamed(var_name);
+    if (!obj) {
+        var err = {"request_id": request_id, "results": {"error": "Object not found: " + var_name}};
+        outlet(1, "response", JSON.stringify(err));
+        return;
+    }
+    var info = build_parameter_info(obj);
+    var result = {
+        "request_id": request_id,
+        "results": {
+            "varname": var_name,
+            "maxclass": obj.maxclass || "",
+            "is_parameter": info !== null,
+            "parameter_info": info
+        }
+    };
+    outlet(1, "response", split_long_string(JSON.stringify(result, null, 0), 2500));
+}
+
+function list_parameters_v8(request_id) {
+    var params = [];
+    try {
+        current_patcher.apply(function (obj) {
+            var mc = obj.maxclass;
+            if (!mc || mc === "patchline") return;
+            var info = build_parameter_info(obj);
+            if (!info) return;
+            // Skip unnamed parameters — caller can't address them
+            var vn = obj.varname || "";
+            if (!vn) return;
+            params.push({
+                varname: vn,
+                maxclass: mc,
+                parameter_info: info
+            });
+        });
+    } catch (e) {
+        var err = {"request_id": request_id, "results": {"error": "list_parameters exception: " + (e.message || String(e))}};
+        outlet(1, "response", JSON.stringify(err));
+        return;
+    }
+    var result = {"request_id": request_id, "results": {"parameters": params, "count": params.length}};
+    outlet(1, "response", split_long_string(JSON.stringify(result, null, 0), 2500));
+}
 

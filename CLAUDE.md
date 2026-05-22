@@ -1,6 +1,8 @@
-# MaxMSP MCP Server
+# MaxMSP MCP Server (personal fork)
 
 This project provides MCP tools for programmatic Max/MSP patch manipulation.
+
+> This is a personal fork on top of the ersatzben fork. Personal-fork additions and code-review checklist live in [`CHANGES.md`](CHANGES.md). The README explains the full fork heritage.
 
 ## Critical Rules
 
@@ -29,6 +31,13 @@ Key tools for object manipulation:
 - `recreate_with_args()` - Change creation-time args, preserving connections
 - `move_object()` - Reposition object
 - `autofit_existing()` - Apply auto-fit to existing object
+
+M4L parameter introspection (read-only):
+- `get_object_attributes(varname)` - now also returns a `parameter_info` sub-dict for parameter-enabled boxes
+- `get_parameter_info(varname)` - narrow read of just the `_parameter_*` metadata
+- `list_parameters()` - enumerate every Live parameter in the current patcher
+
+These surface `_parameter_shortname`, `_parameter_longname`, `_parameter_type`, `_parameter_range`, `_parameter_modmode`, etc. — the M4L attrs that `getattrnames()` hides.
 
 ## Architecture
 
