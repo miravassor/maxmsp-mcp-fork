@@ -101,6 +101,66 @@ These are observations from the debug cycle that are worth filing but out of sco
 
 ---
 
+## Engineering notes for future MCP edits
+
+Cross-cutting gotchas that bit us repeatedly. If you're adding a tool to this MCP, internalize these first:
+
+### v8 `current_patcher` resets on every reload
+
+Every time `max_mcp_v8_add_on.js` is reloaded in Max (double-click → close editor), its module-scope `var current_patcher = this.patcher;` re-runs. `this.patcher` is the immediate parent (e.g. a `run-agent` bpatcher inside `demo.maxpat`) — NOT whatever you'd most-recently navigated to. The v8 side then doesn't know about any prior `switch_to_patcher` call.
+
+**Implication for testing**: after reloading v8, the very next call must be `switch_to_patcher(...)` (or equivalent nav) to re-sync. Otherwise tools that depend on `current_patcher` look up varnames in the wrong patcher and return "Object not found".
+
+**Implication for fix candidates**: making v8 re-sync on reload would require persisting nav state outside the JS module (Max globals, a `coll`, etc.) and re-reading on init. Not done. Related to known-issue #1 above.
+
+### Cross-engine value passing via `outlet(2, ...)`
+
+`max_mcp.js` (classic JS engine) routes some actions to `max_mcp_v8_add_on.js` (V8 engine) via `outlet(2, ...)`. Max-symbol atoms only natively carry primitive types — bare lists and nested objects decompose or get coerced at the boundary.
+
+**Rule**: when a tool needs to forward a complex value (list, dict, nested), `JSON.stringify` it on the max_mcp.js side before outlet, and `JSON.parse` it on the v8 side on receipt. See `set_parameter_property`'s `value` arg for the canonical example. Primitive values (strings, numbers) pass through cleanly without stringify and don't need this.
+
+The existing `complete_signal_safety` / `add_boxtext_*` chunked-transfer paths use the same pattern for the same reason — large/nested payloads always stringify across `outlet(2, ...)`.
+
+### When adding a new MCP tool — the four-file template
+
+A new tool requires:
+
+1. **`server.py`** — `@mcp.tool() async def name(ctx, args...)`. Build a `payload = {"action": "...", ...}` dict and `await maxmsp.send_request(payload, timeout=...)` (or `send_command` for fire-and-forget). Return the response.
+2. **`max_mcp.js`** — add a `case "action_name":` in the `anything()` dispatcher. Either inline the logic OR forward to v8 via `outlet(2, "action_name", request_id, ...args, [JSON.stringify(complex_value)])`.
+3. **`max_mcp_v8_add_on.js`** — if v8-routed, add a `case "action_name":` in v8's dispatcher and the implementing function. Always emit responses via `outlet(1, "response", split_long_string(JSON.stringify(result), 2500))` — the chunked emit is required for any response that could exceed ~16KB (the Max symbol budget per outlet emit).
+4. **Documentation** — README's tool table, CLAUDE.md if it's a user-facing pattern, CHANGES.md if it's part of an in-progress fork iteration.
+
+### Reload sequence after MCP code changes
+
+When you've edited the MCP source:
+1. **Restart the Python MCP server** (typically requires Claude Code restart since FastMCP doesn't hot-reload). Without this, new Python-side tools won't appear in the agent's tool list.
+2. **Reload `js max_mcp.js` in Max**: double-click the `js` object → close its editor. Max re-reads the file.
+3. **Reload `v8 max_mcp_v8_add_on.js` in Max**: same procedure on the `v8` object.
+4. **`script stop`, `script start`** on the `node.script` if you've touched anything node-bridge-related.
+5. **Bring the target patcher window to front** before any `switch_to_patcher` call, to work around known-issue #1.
+6. **Call `switch_to_patcher(...)`** to re-sync v8's `current_patcher` after the v8 reload.
+
+Skipping any of these can produce silent "everything looks normal but tools fail mysteriously" symptoms. We hit each of them at least once during iterations 1 and 2.
+
+### Deliberate departures from documented Max JS API patterns
+
+An audit against https://docs.cycling74.com/apiref/ flagged two places where this code chooses a pragmatic path over the documented one. Both are intentional — record them here so a future maintainer doesn't "fix" them without context.
+
+**1. Direct `obj.getattr("_parameter_*")` instead of `ParameterInfoProvider`.**
+The docs describe `ParameterInfoProvider` (https://docs.cycling74.com/apiref/js/parameterinfoprovider/) as the canonical API for M4L parameter introspection. We rejected it during the iteration-1 probe because it **hung** when called on parameter-enabled boxes in this Max version (9.1.4 + V8 + an M4L device). Direct `getattr`/`setattr` on the underscore-prefixed keys works empirically and is what's currently in use.
+
+Open question: the v8 nav-sync silent-failure (known-issues #1) was only fully diagnosed AFTER we rejected PIP, so PIP's hang might have been a symptom of v8 scanning the wrong patcher rather than a PIP bug per se. Worth a clean re-test in a future iteration with v8 properly synced before any conclusion is drawn. For now: direct getattr is the load-bearing path; PIP is documented but not used.
+
+**2. `JSON.stringify` over `outlet(2, ...)` instead of `Dict` / `outlet_dictionary()`.**
+The docs describe `outlet_dictionary()` (v8-only) and named `Dict` objects as the canonical way to pass structured data between Max JS objects. We use JSON-stringified strings instead, because:
+- `max_mcp.js` runs the classic `js` engine, which has no `outlet_dictionary`. Routing from classic → v8 via Dict would need both ends to use named Dict objects.
+- The existing fork uses the JSON-string-via-outlet pattern throughout (`add_boxtext`, `complete_signal_safety`, `complete_encapsulate`). Following the same pattern keeps the codebase coherent.
+- A Dict-based rewrite is a substantial pipeline change with no clear correctness benefit.
+
+If a future iteration migrates everything to v8 (retiring the classic-JS `max_mcp.js`), revisiting this with `outlet_dictionary` would be idiomatic. Not justified for the current architecture.
+
+---
+
 ## Test status
 
 | Path | Status |
