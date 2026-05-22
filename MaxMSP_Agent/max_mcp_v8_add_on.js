@@ -109,6 +109,14 @@ function anything() {
                 list_parameters_v8(arguments[0]);
             }
             break;
+        case "set_parameter_property":
+            if (arguments.length >= 4) {
+                // value arrives as a JSON-stringified payload from max_mcp.js so lists/numbers survive the outlet
+                var parsed_value;
+                try { parsed_value = JSON.parse(arguments[3]); } catch (e) { parsed_value = arguments[3]; }
+                set_parameter_property_v8(arguments[0], arguments[1], arguments[2], parsed_value);
+            }
+            break;
         default:
             // outlet(1, messagename, ...arguments);
             outlet(1, "response", arguments[1]);
@@ -748,6 +756,58 @@ function get_parameter_info_v8(request_id, var_name) {
     outlet(1, "response", split_long_string(JSON.stringify(result, null, 0), 2500));
 }
 
+// Keys allowed for set_parameter_property. Subset of writable parameter attrs:
+// the PARAM_INFO_KEYS (read list) plus the non-underscore parameter_enable /
+// parameter_mappable. Verified empirically (2026-05-22) that obj.setattr() on
+// the underscore-prefixed forms persists to the saved .amxd on Max 9.1.4.
+var SETTABLE_PARAM_KEYS = PARAM_INFO_KEYS.concat(["parameter_enable", "parameter_mappable"]);
+
+function set_parameter_property_v8(request_id, varname, key, value) {
+    if (SETTABLE_PARAM_KEYS.indexOf(key) === -1) {
+        var err = {"request_id": request_id, "results": {
+            "success": false,
+            "error": "Key '" + key + "' is not in the allowed parameter-property list. Allowed: " + SETTABLE_PARAM_KEYS.join(", ") + ". For arbitrary attrs, use set_object_attribute."
+        }};
+        outlet(1, "response", JSON.stringify(err));
+        return;
+    }
+    var obj = current_patcher.getnamed(varname);
+    if (!obj) {
+        var err = {"request_id": request_id, "results": {"success": false, "error": "Object not found: " + varname}};
+        outlet(1, "response", JSON.stringify(err));
+        return;
+    }
+
+    // Unwrap single-element lists to their bare value. _parameter_range and enum
+    // lists stay as multi-element arrays; shortname/longname/etc come in as ["text"]
+    // and need the bare string for setattr to match the documented call shape.
+    var setval = (Array.isArray(value) && value.length === 1) ? value[0] : value;
+
+    var threw = false, error_msg = null;
+    try { obj.setattr(key, setval); } catch (e) { threw = true; error_msg = e.message || String(e); }
+
+    var after;
+    try { after = obj.getattr(key); } catch (e) { after = null; }
+
+    var success = !threw && (JSON.stringify(after) === JSON.stringify(setval));
+
+    var result = {
+        "request_id": request_id,
+        "results": {
+            "varname": varname,
+            "key": key,
+            "requested_value": value,
+            "applied_value": setval,
+            "actual_value": after,
+            "success": success,
+            "threw": threw,
+            "error": error_msg,
+            "note": success ? "Runtime updated. Save the patcher (Cmd+S) in Max to persist to disk." : "setattr did not produce the requested value. Readback differs."
+        }
+    };
+    outlet(1, "response", JSON.stringify(result));
+}
+
 function list_parameters_v8(request_id) {
     var params = [];
     try {
@@ -773,4 +833,5 @@ function list_parameters_v8(request_id) {
     var result = {"request_id": request_id, "results": {"parameters": params, "count": params.length}};
     outlet(1, "response", split_long_string(JSON.stringify(result, null, 0), 2500));
 }
+
 

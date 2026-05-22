@@ -764,6 +764,54 @@ async def list_parameters(ctx: Context):
 
 
 @mcp.tool()
+async def set_parameter_property(ctx: Context, varname: str, key: str, value: list):
+    """Set a Max for Live parameter property on a live.* box.
+
+    Writes through to runtime and persists to the saved .amxd. Verified
+    empirically on Max 9.1.4 with _parameter_shortname on live.dial: setattr
+    via the underscore-prefixed key updates runtime state immediately and
+    survives Cmd+S to disk.
+
+    Allowed keys (must be one of these):
+        _parameter_shortname, _parameter_longname, _parameter_type,
+        _parameter_range, _parameter_initial, _parameter_initial_enable,
+        _parameter_unitstyle, _parameter_units, _parameter_modmode,
+        _parameter_steps, _parameter_invisible, _parameter_exponent,
+        _parameter_linknames, parameter_enable, parameter_mappable.
+    For arbitrary attrs not in this list, use set_object_attribute instead.
+
+    Value format (always a list, like set_object_attribute):
+    - String attrs (shortname, longname, units): ["Rise"]
+    - Boolean/int attrs (initial_enable, invisible, modmode, etc.): [1]
+    - Float attrs (initial, exponent): [0.5]
+    - Range for Int/Float types: [min, max] e.g. [0, 255]
+    - Range for Enum type: [item1, item2, ...] e.g. ["Off", "On", "Auto"]
+
+    The change updates Max's in-memory state immediately. Save the patcher
+    (Cmd+S) in Max afterwards to persist the change to the .amxd on disk.
+
+    Args:
+        varname (str): Variable name of a parameter-enabled box (live.dial,
+                       live.numbox, live.text, etc. with parameter_enable=1).
+        key (str): Attribute key (see allowed list above).
+        value (list): New value as a list (see formats above).
+
+    Returns:
+        dict: {varname, key, requested_value, applied_value, actual_value,
+               success, threw, error, note}. success=true if readback matched.
+    """
+    maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
+    payload = {
+        "action": "set_parameter_property",
+        "varname": varname,
+        "key": key,
+        "value": value,
+    }
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
+
+
+@mcp.tool()
 async def get_avoid_rect_position(ctx: Context):
     """When deciding the position to add a new object to the path, this rectangular area
     should be avoid. This is useful when you want to add an object to the patch without

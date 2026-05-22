@@ -137,6 +137,14 @@ function anything() {
                 outlet(0, "error", "Missing request_id for list_parameters");
             }
             break;
+        case "set_parameter_property":
+            if (data.request_id && data.varname && data.key && data.value !== undefined) {
+                // JSON-stringify the value so lists/numbers survive the outlet symbol boundary
+                outlet(2, "set_parameter_property", data.request_id, data.varname, data.key, JSON.stringify(data.value));
+            } else {
+                outlet(0, "error", "Missing request_id, varname, key, or value for set_parameter_property");
+            }
+            break;
         case "get_avoid_rect_position":
             if (data.request_id) {
                 get_avoid_rect_position(data.request_id);

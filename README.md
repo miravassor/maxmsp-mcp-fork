@@ -15,12 +15,13 @@ The `_parameter_*` family of attributes — `_parameter_shortname`, `_parameter_
 
 See [`CHANGES.md`](CHANGES.md) for the file-by-file breakdown of what changed and where.
 
-### New MCP tools (+2)
+### New MCP tools (+3)
 
 | Tool | Description |
 |------|-------------|
 | `get_parameter_info(varname)` | Read M4L `_parameter_*` metadata for a single box. Returns `is_parameter: false` if the box has `parameter_enable=0`. |
 | `list_parameters()` | Enumerate every Live parameter in the current patcher. Returns one entry per parameter-enabled box. |
+| `set_parameter_property(varname, key, value)` | Write an M4L parameter property. Whitelisted keys; updates runtime state and persists to the saved `.amxd` after Cmd+S. |
 
 ### Changed tools
 
@@ -215,6 +216,7 @@ Once connected, the LLM can explain, modify, or create Max objects within the pa
 | Tool | Description |
 |------|-------------|
 | `set_object_attribute(varname, attr, value)` | Set an attribute |
+| `set_parameter_property(varname, key, value)` | Set an M4L `_parameter_*` attribute (whitelisted keys; persists to `.amxd` after Cmd+S) |
 | `set_message_text(varname, text_list)` | Set message box content |
 | `set_number(varname, num)` | Set number box/slider value |
 | `send_bang_to_object(varname)` | Send a bang |
