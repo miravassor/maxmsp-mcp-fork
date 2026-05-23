@@ -33,11 +33,9 @@ Memory `[feedback-m4l-resize]` says don't *write* to `thispatcher`'s `presentati
 
 No way to know whether the patcher is currently being viewed in Patching or Presentation mode in Max. Useful for diagnosing "I can't see my labels"-type issues — if user is in Patching mode, labels in Presentation only won't show.
 
-### 1.4 🔄 OPEN — Box `text` field in `get_object_attributes`
+### 1.4 ✅ FIXED — Box `text` field in `get_object_attributes`
 
-`get_object_attributes` does not return the box's `text` content. `get_objects_in_patch` does (in the per-box dict, as `"text"`). For classes like `live.comment` where the displayed string lives in the box text (not in an attribute), this means `get_object_attributes` cannot report the label content. See §3.2.
-
-**Note**: this fork's augmented `get_object_attributes` adds `parameter_info` but does NOT yet add `text`. Trivial extension via v8's `obj.boxtext`. Likely next quick-win.
+**Fixed (2026-05-23):** Added `obj.boxtext` to the attributes dict in `get_object_attributes_v8`. Now returns `text` field matching what `get_objects_in_patch` reports. Closes §3.2.
 
 ### 1.5 🔄 OPEN — Patcher's loadbang / device state
 
@@ -119,9 +117,9 @@ No tool to change an existing object's varname. When two objects collide on auto
 
 **Fixed (2026-05-23):** Added `live.comment` to the post-creation `set` dispatch in `add_object` (line 392) and to the `text` attr handling in `set_object_attribute` (line 639). Both now route `text` through `obj.message("set", args)`. Also fixed a missing `return` in `set_object_attribute` that caused the `text` set to fall through to "Attribute not found". Pairs with §4.4.
 
-### 3.2 🔄 OPEN — `get_object_attributes` vs `get_objects_in_patch` content divergence
+### 3.2 ✅ FIXED — `get_object_attributes` vs `get_objects_in_patch` content divergence
 
-`get_objects_in_patch` returns the per-box `text` field; `get_object_attributes` doesn't. They show different snapshots of the same object. Pairs with §1.4 — fixing 1.4 closes this.
+**Fixed (2026-05-23):** Closed by §1.4 fix. Both tools now return `text`.
 
 ### 3.3 🔄 OPEN — `get_object_connections` vs `get_objects_in_patch` lines list
 
@@ -271,7 +269,7 @@ When adding code for a fix, also update `CHANGES.md` per-iteration if it's a mea
 ## Prioritization (informal, as of 2026-05-22)
 
 Highest impact-per-effort, next quick wins:
-1. **§1.4 + §3.2** add box `text` to `get_object_attributes` — small additive change via v8.
+1. **§3.3** lines list divergence — investigate root cause (stale varnames were likely the culprit; may already be fixed by §4.3).
 
 Higher-impact, more involved:
 - **§2.1** save tool — frequency 5/5, but needs M4L safety verification first.
@@ -283,4 +281,4 @@ Defer:
 - **§2.4** Presentation mode toggle — thispatcher hazard concerns.
 - **§4.5** position no-op detection — workaround already documented.
 
-Recently fixed (2026-05-23): §4.3 + §3.4 (varname clobbering/collisions), §3.1 + §4.4 (live.comment text).
+Recently fixed (2026-05-23): §4.3 + §3.4 (varname clobbering/collisions), §3.1 + §4.4 (live.comment text), §1.4 + §3.2 (boxtext in get_object_attributes).

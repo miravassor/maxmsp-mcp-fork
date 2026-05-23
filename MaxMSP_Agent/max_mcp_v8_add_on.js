@@ -728,6 +728,11 @@ function get_object_attributes_v8(request_id, var_name) {
     } catch (e) {
         // emit whatever we have
     }
+    // boxtext isn't in getattrnames() but is available via v8
+    var boxtext = obj.boxtext;
+    if (boxtext !== undefined && boxtext !== null) {
+        attributes.text = boxtext;
+    }
     var param_info = build_parameter_info(obj);
     if (param_info) {
         attributes.parameter_info = param_info;
