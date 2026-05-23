@@ -33,8 +33,7 @@ All steps needed — skipping any causes silent failures:
 2. Reload `js max_mcp.js` in Max: double-click the `js` object, then close its editor
 3. Reload `v8 max_mcp_v8_add_on.js` in Max: same procedure on the `v8` object
 4. `script stop` then `script start` on `node.script` (if node bridge was touched)
-5. Bring the target patcher window to front before calling `switch_to_patcher(...)` (workaround for v8 nav-sync bug — GAPS.md §N1)
-6. Call `switch_to_patcher(...)` to re-sync v8's `current_patcher` after v8 reload
+5. Call `switch_to_patcher(...)` to re-sync v8's `current_patcher` after v8 reload
 
 ## Architecture
 
@@ -49,10 +48,10 @@ Claude Code ←—MCP—→ server.py ←—Socket.IO:5002—→ max_mcp_node.js
 
 **Four components, two JS engines:**
 
-- `server.py` (1200 lines) — Python FastMCP server. Defines all MCP tools, handles validation (float enforcement, dial rejection, trigger acknowledgment, etc.), and communicates with Max via Socket.IO.
+- `server.py` (~1300 lines) — Python FastMCP server. Defines all MCP tools, handles validation (float enforcement, dial rejection, trigger acknowledgment, etc.), and communicates with Max via Socket.IO.
 - `max_mcp_node.js` — Node.js bridge inside Max's `node.script`. Relays Socket.IO messages between the Python server and the Max-side JS objects.
-- `max_mcp.js` (1800 lines) — Classic JS engine (`js` object). Main dispatcher: handles most operations inline, forwards v8-dependent ones via `outlet(2, ...)`.
-- `max_mcp_v8_add_on.js` (800 lines) — V8 engine (`v8` object). Handles operations needing `obj.boxtext` (encapsulate, autofit) and M4L parameter introspection (`_parameter_*` attrs).
+- `max_mcp.js` (~1900 lines) — Classic JS engine (`js` object). Main dispatcher: handles most operations inline, forwards v8-dependent ones via `outlet(2, ...)`.
+- `max_mcp_v8_add_on.js` (~870 lines) — V8 engine (`v8` object). Handles operations needing `obj.boxtext` (encapsulate, autofit), M4L parameter introspection, and box-level attribute access (`getboxattr`/`setboxattr`).
 
 ### Communication patterns
 
@@ -100,24 +99,40 @@ See the `/maxmsp` skill for the placement formula (first object at `y = bottom +
 
 ## Key MCP tools
 
-Object manipulation: `get_avoid_rect_position()`, `add_max_object()`, `recreate_with_args()`, `move_object()`, `autofit_existing()`.
+Object manipulation: `get_avoid_rect_position()`, `add_max_object()`, `recreate_with_args()`, `move_object()`, `autofit_existing()`, `rename_object()`.
+
+Patcher operations: `save_patcher()`, `set_presentation_mode()`, `get_patcher_context()` (returns name, filepath, openrect, locked, dirty, object_count, openinpresentation).
 
 M4L parameter introspection (read + write):
-- `get_object_attributes(varname)` — also returns `parameter_info` sub-dict for parameter-enabled boxes
+- `get_object_attributes(varname)` — returns object attrs + `box_attrs` sub-dict (outer box) + `parameter_info` sub-dict + `text`
 - `get_parameter_info(varname)` — narrow read of just the `_parameter_*` metadata
 - `list_parameters()` — enumerate every Live parameter in the current patcher
-- `set_parameter_property(varname, key, value)` — write a `_parameter_*` attribute (whitelisted keys; persists to `.amxd` after Cmd+S)
+- `set_parameter_property(varname, key, value)` — write a `_parameter_*` attribute (whitelisted keys; persists to `.amxd` after save)
 
 These surface `_parameter_shortname`, `_parameter_longname`, `_parameter_type`, `_parameter_range`, `_parameter_modmode`, etc. — the M4L attrs that `getattrnames()` hides.
 
-## Max API notes (verified empirically)
+## Max API notes (verified against official docs)
 
-Official reference: https://docs.cycling74.com/apiref/
+Official JS API reference: https://docs.cycling74.com/apiref/js/
 
-- **`_parameter_*` attrs via getattr/setattr work** on `live.*` boxes with `parameter_enable=1`, even though the keys aren't in `getattrnames()`. The on-disk `.amxd` stores them as `parameter_<key>` (no underscore); the JS API uses the underscore form. Same backing storage.
-- **`_parameter_type` values**: `0`=Int, `1`=Float, `2`=Enum (where `_parameter_range` is enum item names), `3`=Blob.
-- **`obj.boxtext` is V8-only.** Classic `js` engine doesn't have it — that's why `encapsulate`, `autofit`, and `get_object_attributes` route through v8.
-- **`current_patcher.apply(fn)` vs `applydeep(fn)`**: `apply` is current patcher only; `applydeep` recurses into subpatchers. `applyif(fn, predicate)` filters.
-- **`this.patcher`** in v8 resets to the containing patcher on every reload — re-sync via `switch_to_patcher` after editing v8 code.
-- **`thispatcher` messages in M4L**: anything that touches geometry (`presentation_rect`, `wclose`, etc.) is hazardous (can wipe device layout). The `save` message itself is safe.
-- **JSON-stringify over outlet instead of `Dict`/`outlet_dictionary()`**: deliberate choice for consistency between classic js and v8 engines. See CHANGES.md "Deliberate departures" for rationale.
+**Always check the docs before assuming any API behavior.** A full audit of 19 API pages was done 2026-05-23 — results in the memory file `reference-max-js-api.md`.
+
+### Two attribute APIs: `getattr` vs `getboxattr`
+- `obj.getattr(name)` / `obj.getattrnames()` — reads **object-level** attributes
+- `obj.getboxattr(name)` / `obj.getboxattrnames()` — reads **box-level** attributes
+- For bpatchers: `getattr` reads the inner patcher; `getboxattr` reads the outer box (presentation_rect, hidden, etc.)
+- Write equivalents: `obj.setattr()` / `obj.setboxattr()`
+
+### thispatcher messages (NOT the same as JS method names)
+Reference: https://docs.cycling74.com/reference/thispatcher
+- `write` saves the patcher (NOT `save` — no such message exists)
+- `presentation 0/1` enters/exits Presentation mode
+- `front` brings window to front
+- `dirty` / `clean` set/reset the dirty bit
+
+### Other verified facts
+- **`obj.boxtext`** is V8-only — classic `js` engine doesn't have it.
+- **`this.patcher`** works at module scope in v8 but NOT inside functions. Use a module-scope `root_patcher` variable instead.
+- **`_parameter_*` attrs** work via `getattr`/`setattr` on `live.*` boxes with `parameter_enable=1`, even though hidden from `getattrnames()`. Undocumented but empirically verified. The official API is `ParameterInfoProvider` (hung in our test environment — may work after v8 nav fix).
+- **`apply()` traversal order** is not specified by the docs — do not rely on any particular order.
+- **JSON-stringify over outlet** instead of `Dict`/`outlet_dictionary()`: deliberate choice for consistency between classic js and v8 engines. See CHANGES.md "Deliberate departures" for rationale.

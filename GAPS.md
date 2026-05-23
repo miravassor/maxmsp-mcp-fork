@@ -4,7 +4,7 @@ Master list of what this MCP doesn't expose, exposes inconsistently, or makes ha
 
 For per-iteration history of fixes, see [`CHANGES.md`](CHANGES.md). For the upstream-fork additions vs this fork's additions, see the README.
 
-**Last reviewed: 2026-05-22**
+**Last reviewed: 2026-05-23**
 
 ## Legend
 
@@ -242,18 +242,12 @@ When the MCP itself gets touched:
 
 When adding code for a fix, also update `CHANGES.md` per-iteration if it's a meaningful unit of work.
 
-## Prioritization (informal, as of 2026-05-22)
+## Prioritization (as of 2026-05-23)
 
-Highest impact-per-effort, next quick wins:
-1. **§1.8** `set_object_attribute` silently no-ops for patcher-level attributes on bpatchers.
-
-Higher-impact, more involved:
-- **§2.1** save tool — frequency 5/5, but needs M4L safety verification first.
-- **§1.6** bpatcher outer-box attributes not exposed via get_object_attributes.
-
-Defer:
+Remaining open (all low severity):
+- **§1.2** patcher presentation_rect — needs LiveAPI, not solvable via JS API alone.
+- **§1.7** inlet/outlet index remapping — Max behavior; best we can do is warn.
 - **§4.2** `[console]` auto-install — has trade-offs (modifies patcher state).
-- **§2.4** Presentation mode toggle — thispatcher hazard concerns.
-- **§4.5** position no-op detection — workaround already documented.
+- **§4.5** position no-op on `function`/`bpatcher` — Max behavior; can detect and warn.
 
-Recently fixed (2026-05-23): §4.3 + §3.4 (varname clobbering/collisions), §3.1 + §4.4 (live.comment text), §1.4 + §3.2 (boxtext in get_object_attributes), §3.3 (patchline divergence), §N1 (v8 nav failure).
+Fixed 2026-05-23 (17 items): §4.3, §3.4, §3.1, §4.4, §1.4, §3.2, §3.3, §N1, §2.1, §2.2, §1.6, §1.8, §2.4, §2.5, §1.3, §1.5, plus API doc audit covering 19 pages.
