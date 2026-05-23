@@ -309,6 +309,20 @@ function anything() {
                 outlet(0, "error", "Missing varname for autofit_existing");
             }
             break;
+        case "rename_object":
+            if (data.request_id && data.varname && data.new_varname) {
+                rename_object(data.request_id, data.varname, data.new_varname);
+            } else {
+                outlet(0, "error", "Missing request_id, varname, or new_varname for rename_object");
+            }
+            break;
+        case "set_presentation_mode":
+            if (data.request_id && data.mode !== undefined) {
+                set_presentation_mode(data.request_id, data.mode);
+            } else {
+                outlet(0, "error", "Missing request_id or mode for set_presentation_mode");
+            }
+            break;
         case "encapsulate":
             if (data.request_id && data.varnames && data.subpatcher_name && data.subpatcher_varname) {
                 encapsulate(data.request_id, data.varnames, data.subpatcher_name, data.subpatcher_varname);
@@ -917,6 +931,44 @@ function switch_to_patcher(request_id, patcher_name) {
         "filepath": found.filepath || "(unsaved)"
     }};
     outlet(1, "response", JSON.stringify(result, null, 0));
+}
+
+function rename_object(request_id, varname, new_varname) {
+    var obj = current_patcher.getnamed(varname);
+    if (!obj) {
+        var result = {"request_id": request_id, "results": {"success": false, "error": "Object not found: " + varname}};
+        outlet(1, "response", JSON.stringify(result));
+        return;
+    }
+    var existing = current_patcher.getnamed(new_varname);
+    if (existing) {
+        var result = {"request_id": request_id, "results": {"success": false, "error": "Name already taken: " + new_varname}};
+        outlet(1, "response", JSON.stringify(result));
+        return;
+    }
+    obj.varname = new_varname;
+    var result = {"request_id": request_id, "results": {
+        "success": true,
+        "old_varname": varname,
+        "new_varname": new_varname
+    }};
+    outlet(1, "response", JSON.stringify(result));
+}
+
+function set_presentation_mode(request_id, mode) {
+    // Reuse existing thispatcher or create one (maxmcpid prefix hides from collect_objects).
+    // Message is "presentation" followed by 0 or 1 (per thispatcher docs).
+    var tp = current_patcher.getnamed("maxmcpid_save_tmp");
+    if (!tp) {
+        tp = current_patcher.newdefault(0, 0, "thispatcher");
+        tp.varname = "maxmcpid_save_tmp";
+    }
+    tp.message("presentation", mode ? 1 : 0);
+    var result = {"request_id": request_id, "results": {
+        "success": true,
+        "mode": mode ? 1 : 0
+    }};
+    outlet(1, "response", JSON.stringify(result));
 }
 
 function save_patcher(request_id) {

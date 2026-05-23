@@ -81,13 +81,13 @@ Previously: `set_object_attribute("_parameter_*", ...)` silently failed per the 
 
 **Surfaced by**: `set_parameter_property(varname, key, value)`. Whitelisted to the `_parameter_*` family. Implementation: `max_mcp_v8_add_on.js` `set_parameter_property_v8` + `SETTABLE_PARAM_KEYS`. Iteration 2 in CHANGES.md.
 
-### 2.4 🔄 OPEN — Toggle Presentation mode view
+### 2.4 ✅ FIXED — Toggle Presentation mode view
 
-No tool to put Max into Presentation mode (or out of it) for the current patcher. User must use View menu. Likely `thispatcher presentation 0/1` works but the resize-hazard memory makes us cautious — verify in a throwaway device first.
+**Fixed (2026-05-23):** Added `set_presentation_mode(mode)` tool. Uses `thispatcher presentation 0/1` (verified against docs — safe, doesn't touch geometry). Reuses the same `maxmcpid_save_tmp` thispatcher object as `save_patcher`.
 
-### 2.5 🔄 OPEN — Rename varnames (scripting names)
+### 2.5 ✅ FIXED — Rename varnames (scripting names)
 
-No tool to change an existing object's varname. When two objects collide on auto-generated names (see §4.3), the user must rename via Inspector by hand. Trivially `obj.varname = new_name` in Max JS; just needs a tool wrapper with collision detection.
+**Fixed (2026-05-23):** Added `rename_object(varname, new_varname)` tool. Sets `obj.varname = new_varname` with collision check via `getnamed` — fails if `new_varname` is already taken.
 
 ---
 

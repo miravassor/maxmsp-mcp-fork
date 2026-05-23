@@ -1156,6 +1156,49 @@ async def autofit_existing(
 
 
 @mcp.tool()
+async def rename_object(
+    ctx: Context,
+    varname: str,
+    new_varname: str,
+):
+    """Rename an object's scripting name (varname).
+
+    Changes the object's varname used to reference it in MCP tool calls.
+    Checks for collisions — fails if another object already has the target name.
+
+    Args:
+        varname (str): Current variable name of the object.
+        new_varname (str): New variable name to assign.
+
+    Returns:
+        dict: Success status with old and new varname.
+    """
+    maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
+    payload = {"action": "rename_object", "varname": varname, "new_varname": new_varname}
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
+
+
+@mcp.tool()
+async def set_presentation_mode(
+    ctx: Context,
+    mode: int,
+):
+    """Toggle the current patcher's Presentation mode.
+
+    Args:
+        mode (int): 1 to enter Presentation mode, 0 to exit.
+
+    Returns:
+        dict: Success status with current mode.
+    """
+    maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
+    payload = {"action": "set_presentation_mode", "mode": mode}
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
+
+
+@mcp.tool()
 async def check_signal_safety(ctx: Context):
     """Analyze the current patch for potentially dangerous signal patterns.
 
