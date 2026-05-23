@@ -45,6 +45,42 @@ No way to inspect whether the device is frozen, the device-type field of the con
 
 `patcher.dirty` is trivially accessible via `getattr` (per the audit) and would handle the save-state half cheaply.
 
+### 1.7 ⚠️ OPEN — Subpatcher inlet/outlet indices re-map on reposition; parent cords silently shift
+
+Inside a subpatcher (`p` or bpatcher), `inlet`/`outlet` objects are indexed by their **left-to-right x-position**, NOT creation order. When `move_object` is called on one of those objects, the indices recompute. The parent's existing cords attached to that wrapper box DO NOT follow the moved object — they stay attached to the same INDEX, which now means a different outlet object.
+
+Net effect: reordering outlets via `move_object` silently rotates which parent cords carry which payload. Symptoms: "the bpatcher is wired but everything goes to the wrong destination." Bit us twice this session — once when the outlets got positioned right-to-left initially, and again after a `move_object` that thought it was un-rotating things but actually shifted them by one position because the cords didn't follow.
+
+Fix candidates: (a) when `move_object` is called on an `inlet`/`outlet` inside a subpatcher with live parent cords, WARN that indices may shift; (b) on `move_object`, auto-rewrite the parent's cord src/dst indices so cords follow the moved object visually (hard — Max may not expose this); (c) document loudly in the skill.
+
+### 1.8 ⚠️ OPEN — `set_object_attribute` silently no-ops for several patcher-level attributes
+
+`set_object_attribute("<bpatcher_varname>", "openinpresentation", [1])` reports success but the inner patcher's attribute stays at 0. Same for `varname` rename (the §2.5 case).
+
+Empirically, the working workaround for `openinpresentation` is to:
+1. `enter_subpatcher(<bpatcher_varname>)`
+2. `add_max_object("thispatcher", varname="...")`
+3. `send_messages_to_object("...", ["openinpresentation", 1])`
+4. `exit_subpatcher()`
+
+This persists. So the underlying Max mechanism works fine via messages-to-thispatcher; the gap is that `set_object_attribute` doesn't route to it.
+
+Fix candidate: in `set_object_attribute`, when the target is a bpatcher and the attr is one of the inner-patcher-level keys (`openinpresentation`, `gridsize`, `bgcolor`, etc.), route via a temporary thispatcher message rather than a direct `obj.setattr`.
+
+Related: §1.6 (read side of the same problem), §2.5 (varname rename specifically).
+
+### 1.6 ⚠️ OPEN — Bpatcher outer-box attributes not exposed
+
+`get_object_attributes(<bpatcher_varname>)` returns the **inner patcher's** attributes (gridsize, openrect, oscprefix, syntax colors, etc.) — NOT the outer box's attributes that live in the parent patcher (`presentation`, `presentation_rect`, `presentation_position`, `patching_rect`, `hidden`, etc.).
+
+This makes it impossible to read a bpatcher's positioning or visibility state via the MCP. Bit us 2026-05-22 when trying to mirror an existing bpatcher's presentation rect onto a replacement bpatcher — had to ask the user to read the values from the Inspector.
+
+Verified empirically: two bpatchers (one created via `jpatcher`, one via `bpatcher @embed 1`) returned **byte-identical** inner-patcher attribute dumps. Neither dump included `presentation_*` or `patching_rect`. The outer-box attrs only appear in `get_objects_in_patch` (which gives `patching_rect` per box), and even there `presentation_rect` / `presentation` / `hidden` are not returned.
+
+Related Max behavior (NOT an MCP gap): `jpatcher` and `bpatcher`, typed as class names, resolve to the **same underlying class**. What actually distinguishes a usable bpatcher from a useless empty box is the `@embed 1` argument, not the typed name. See user memory `[max-jpatcher-bpatcher-alias]`. `obj.maxclass` returns `"patcher"` (generic), `obj.getattr("maxclass")` returns `"jpatcher"` (inner patcher); neither returns `"bpatcher"`. After the §4.3 fix, `collect_objects` prefers `obj.maxclass` so bpatchers now report as `"patcher"` instead of `"jpatcher"` — marginally better but still not distinguishable from `p` subpatchers without checking other attrs.
+
+Fix candidate: in v8's `get_object_attributes`, detect bpatcher class and ALSO emit the outer box's attribute set (via `obj.box` or whatever the v8 path is to the box wrapper). Or expose them via a dedicated `get_box_attributes` tool. Pairs with §1.2 (patcher-level presentation_rect).
+
 ---
 
 ## 2. Missing writes
@@ -95,23 +131,25 @@ Fix candidates: (a) detect `live.comment` in `add_max_object` and auto-emit `obj
 
 After making connections, `get_object_connections` reflects them immediately, but the `lines` array in `get_objects_in_patch` sometimes doesn't include the same patchlines. Observed during the slew investigation (upstream session): `live.text → obj-53` was returned by `get_object_connections` but missing from the `lines` listing. Possibly a serialization timing issue, possibly the auto-naming asymmetry in `collect_objects` (line 1044 skips lines without a destination varname; `get_object_connections` doesn't).
 
-### 3.4 🔄 OPEN — Varname-keyed lookups when varnames collide
+### 3.4 ✅ MOSTLY FIXED — Varname-keyed lookups when varnames collide
 
-`get_object_connections("obj-0")` returns *one* object's connections when two objects share the varname (e.g., a `panel` auto-named `obj-0` colliding with the original `pictslider obj-0`). No warning is raised. The MCP should either:
-- Error/warn when a lookup is ambiguous, OR
-- Return both objects' connections (annotated).
+`get_object_connections("obj-0")` returns *one* object's connections when two objects share the varname (e.g., a `panel` auto-named `obj-0` colliding with the original `pictslider obj-0`). No warning is raised.
 
-Root of the collision: `collect_objects` in `max_mcp.js` auto-names unnamed boxes `obj-N` per call with a counter that resets each invocation.
+Root of the collision was `collect_objects` in `max_mcp.js` auto-naming unnamed boxes `obj-N` with a counter that resets each invocation. **Fixed (2026-05-23):** collision detection added — `collect_objects` now checks `current_patcher.getnamed("obj-N")` before assigning, skipping names that are already taken. Combined with the §4.3 bpatcher fix, the two main collision vectors are closed.
+
+Remaining edge: `getnamed` returns only the *first* match, so if two objects already share a name (from prior sessions or manual Inspector edits), the MCP still can't distinguish them. Ambiguity warning not yet implemented.
 
 ---
 
 ## 4. Friction / UX
 
-### 4.1 🔄 OPEN — `add_max_object` preflight requirement
+### 4.1 ✅ NOT A GAP — `add_max_object` preflight requirement is intentional
 
-`add_max_object` requires `get_avoid_rect_position()` to be called first or the call errors with "PREFLIGHT REQUIRED". The avoid rect returned typically covers the entire occupied patcher area, which makes "avoid this" advice unhelpful for placing inside the existing layout — and that's the most common case.
+`add_max_object` requires `get_avoid_rect_position()` to be called first or the call errors with "PREFLIGHT REQUIRED". This was previously flagged as a "drop the preflight" quick win.
 
-Fix candidate: drop the preflight requirement (or downgrade to warning). One-line removal in `max_mcp.js` (the `avoid_rect_called` gate at the start of `add_object`). Highest-ratio quick win — every session hits this.
+**Resolved (2026-05-22):** the `/maxmsp` skill is the reference for placement behavior, and it mandates calling `get_avoid_rect_position()` before every placement ("NEVER skip this step. NEVER guess positions."). The Python-side preflight gate enforces that the skill's rule was actually followed; removing it would create a silent divergence between skill and runtime. Kept as-is.
+
+If the avoid rect's "whole occupied area" output is awkward in dense layouts, the answer is to read `get_objects_in_patch()` and place explicitly — not to drop the preflight.
 
 ### 4.2 🔄 OPEN — `[console]` object requirement for `get_max_console`
 
@@ -119,11 +157,17 @@ Fix candidate: drop the preflight requirement (or downgrade to warning). One-lin
 
 Fix candidate: bundle the listener with the MCP itself (programmatically inject the `[console]` object via `current_patcher.newdefault(..., "console")` on first call). M4L hazard concern: modifies the patcher; trade-off needs care.
 
-### 4.3 🔄 OPEN — Auto-generated varnames collide
+### 4.3 ✅ FIXED — Auto-generated varnames collide / bpatcher varnames clobbered
 
-When `collect_objects` runs (during `get_objects_in_patch`), it assigns `obj-N` varnames to unnamed boxes based on a per-call counter. This can produce collisions with existing user-assigned varnames or with subsequently-added objects.
+Two bugs in `collect_objects` (`max_mcp.js`):
 
-Fix candidates: (a) prefix auto-assigned names with `auto-obj-N`; (b) check for collisions before assignment; (c) skip auto-naming entirely and report `null` for unnamed boxes. Pairs with §3.4.
+**Bug 1 — bpatcher scripting name destruction (DESTRUCTIVE).** `collect_objects` used `obj.getattr("varname")` to read scripting names. For bpatcher/jpatcher boxes, `getattr` routes through the **inner patcher's** attribute space (same root cause as §1.6) and returns null — even when the outer box has a scripting name. The code then wrote `obj.varname = "obj-N"`, **overwriting the real scripting name** on every `get_objects_in_patch` call. Symptoms: varname changes between reads (counter resets, apply order shifts), user-set names don't stick, `enter_subpatcher` fails because `getnamed` can't find the clobbered name.
+
+**Fix (2026-05-23):** Changed `obj.getattr("varname")` → `obj.varname` (direct property access). This reads the outer box's scripting name correctly for all object types. Same change applied to `out.dstobject.varname` for patchline destination lookup. The rest of the codebase (`get_object_connections`, `recreate_with_args`, v8 add-on) already used `obj.varname`.
+
+**Bug 2 — counter-based collisions.** The `obj_count` counter reset to 0 on every call. When `apply()` visits a new unnamed object before existing auto-named ones, it assigns `obj-0` which another object already has.
+
+**Fix (2026-05-23):** Added `while (current_patcher.getnamed("obj-" + obj_count))` loop before assigning, skipping names that are already taken. Pairs with §3.4.
 
 ### 4.4 🔄 OPEN — `set_object_attribute` for `text` on `live.comment`
 
@@ -189,6 +233,34 @@ Use `live.thisdevice` (not `loadbang`) for any init that touches the Live API. T
 
 Max for Live mangles symbols starting with `---` to be unique per device instance. Use this prefix on `send`/`buffer~`/`coll` names to avoid namespace collisions between multiple instances of the same device.
 
+### 5.6 `pattr @bindto` does NOT fire pattr's outlet on bound-value change
+
+`pattr /x @bindto someTextedit` keeps the pattr's value in sync with the textedit's content, but pattr's outlet only fires on direct input or `bang`. When the user edits the bound textedit at runtime, pattr's internal value updates but its outlet stays silent. Downstream cords (e.g., `pattr → outlet`) won't propagate the change.
+
+**Workaround**: wire the bound object DIRECTLY to the destination in parallel with the pattr cord. pattr handles init (on `bang`); the direct cord handles runtime edits.
+
+Bit us this session: address-textedit edits weren't retargeting `sel` until we added the parallel `textedit → outlet` cord.
+
+### 5.7 `textedit` `lines = 0` default eats Enter as newline
+
+`textedit` defaults to multi-line mode (`lines = 0`). Enter inserts a newline; the textedit doesn't fire its outlet. For a single-line input that submits on Enter, set `lines = 1`.
+
+Bit us this session: users couldn't submit OSC address changes because Enter just added a return line.
+
+### 5.8 `jpatcher` and `bpatcher` are class aliases
+
+In Max's New Object box, typing `jpatcher` or `bpatcher` instantiates **the same underlying class**. Their attribute dumps via `get_object_attributes` are byte-identical (except an internal UID). What actually distinguishes a usable bpatcher from an empty no-op box is the `@embed 1` argument, NOT the typed class name.
+
+Bit us across two sessions: a `jpatcher` created without `@embed` looked indistinguishable from a working bpatcher but had no inner patcher to enter/edit.
+
+### 5.9 `set_parameter_property("_parameter_initial", x)` may silently clamp to range floor
+
+Observed 2026-05-22: set `_parameter_range = [1024, 65535]`, then `_parameter_initial = 9000` (both reported success). On subsequent read, `_parameter_initial = 1024` (the range floor), not 9000.
+
+Hypothesis: Max applies a clamp pass when the param store is finalized that resets `_parameter_initial` to the range minimum if it doesn't match a re-evaluated default. Possibly only triggered when both range and initial are set in the same MCP burst without a settle between them.
+
+Workaround: read back after setting `_parameter_initial`. If clamped, set it again after a `send_messages_to_object(varname, ["init"])` cycle, or set the param's current value to match (`send_messages_to_object(varname, ["set", X])`).
+
 ---
 
 ## How to use this file
@@ -205,9 +277,8 @@ When adding code for a fix, also update `CHANGES.md` per-iteration if it's a mea
 ## Prioritization (informal, as of 2026-05-22)
 
 Highest impact-per-effort, next quick wins:
-1. **§4.1** drop preflight requirement — one-line removal, every session hits it.
-2. **§3.1 + §4.4** `live.comment` text plumbing — two-line fix in the class-dispatch list of `add_max_object` + `set_object_attribute`.
-3. **§1.4 + §3.2** add box `text` to `get_object_attributes` — small additive change via v8.
+1. **§3.1 + §4.4** `live.comment` text plumbing — two-line fix in the class-dispatch list of `add_max_object` + `set_object_attribute`.
+2. **§1.4 + §3.2** add box `text` to `get_object_attributes` — small additive change via v8.
 
 Higher-impact, more involved:
 - **§2.1** save tool — frequency 5/5, but needs M4L safety verification first.

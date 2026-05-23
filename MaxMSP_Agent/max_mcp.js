@@ -1045,12 +1045,19 @@ function send_chunked_to_v8(action, request_id, json_str) {
 }
 
 function collect_objects(obj) {
-    // Use getattr() for safer null handling in Max 9 / M4L context
-    var varname = obj.getattr("varname");
+    // Use obj.varname (direct property), NOT obj.getattr("varname").
+    // For bpatcher/jpatcher boxes, getattr routes through the inner patcher's
+    // attribute space and returns null — then the auto-naming overwrites the
+    // box's real scripting name. obj.varname reads the outer box correctly.
+    var varname = obj.varname;
     if (varname && String(varname).substring(0, 8) === "maxmcpid") {
         return;
     }
     if (!varname) {
+        // Skip over names already taken by other objects to avoid collisions
+        while (current_patcher.getnamed("obj-" + obj_count)) {
+            obj_count += 1;
+        }
         varname = "obj-" + obj_count;
         obj.varname = varname;
     }
@@ -1062,7 +1069,7 @@ function collect_objects(obj) {
         var out = outputs[i];
         // Guard against null dstobject (can crash in Max 9 M4L if destination is invalid)
         if (!out || !out.dstobject) continue;
-        var dstname = out.dstobject.getattr("varname");
+        var dstname = out.dstobject.varname;
         if (!dstname) continue;
         lines.push({patchline: {
             source: [varname, out.srcoutlet],
@@ -1071,7 +1078,7 @@ function collect_objects(obj) {
     }
 
     boxes.push({box: {
-        maxclass: obj.getattr("maxclass") || obj.maxclass,
+        maxclass: obj.maxclass || obj.getattr("maxclass"),
         varname: varname,
         patching_rect: obj.rect,
     }});
