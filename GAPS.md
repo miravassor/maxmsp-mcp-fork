@@ -25,23 +25,19 @@ The M4L parameter metadata (`_parameter_shortname`, `_parameter_longname`, `_par
 
 ### 1.2 🔄 OPEN — Patcher-level `presentation_rect`
 
-No way to read the patcher's own `presentation_rect` (the visible area of the device strip in Live). Knowing this would let layout planning respect Live's viewport bounds.
+`presentation_rect` is a per-BOX attribute, not patcher-level. The patcher's own viewport bounds in an M4L device strip are a Live-level concept and may need LiveAPI to read. Added `openrect` (editor window rect) to `get_patcher_context` as a partial workaround.
 
-Memory `[feedback-m4l-resize]` says don't *write* to `thispatcher`'s `presentation_rect`, but *reading* should be safe via `patcher.getattr("presentation_rect")` per the audit findings. Low effort if undertaken.
+### 1.3 ✅ PARTIALLY FIXED — Current view mode (Patching vs Presentation)
 
-### 1.3 🔄 OPEN — Current view mode (Patching vs Presentation)
-
-No way to know whether the patcher is currently being viewed in Patching or Presentation mode in Max. Useful for diagnosing "I can't see my labels"-type issues — if user is in Patching mode, labels in Presentation only won't show.
+**Fixed (2026-05-23):** `get_patcher_context` now returns `openinpresentation` (the saved default — whether the patcher opens in Presentation mode), `locked`, `dirty`, `openrect`, `object_count`, `name`, `filepath`. Note: `openinpresentation` is the saved preference, not necessarily the current view state. The JS API doesn't expose the live Patching-vs-Presentation toggle state.
 
 ### 1.4 ✅ FIXED — Box `text` field in `get_object_attributes`
 
 **Fixed (2026-05-23):** Added `obj.boxtext` to the attributes dict in `get_object_attributes_v8`. Now returns `text` field matching what `get_objects_in_patch` reports. Closes §3.2.
 
-### 1.5 🔄 OPEN — Patcher's loadbang / device state
+### 1.5 ✅ PARTIALLY FIXED — Patcher's loadbang / device state
 
-No way to inspect whether the device is frozen, the device-type field of the containing project, the file's save state, etc. All would help diagnostics.
-
-`patcher.dirty` is trivially accessible via `getattr` (per the audit) and would handle the save-state half cheaply.
+**Fixed (2026-05-23):** `dirty` (unsaved changes) and `locked` state now in `get_patcher_context` via `Wind.dirty` and `Patcher.locked`. Device freeze state and device-type still not exposed (would need LiveAPI).
 
 ### 1.7 ⚠️ OPEN — Subpatcher inlet/outlet indices re-map on reposition; parent cords silently shift
 

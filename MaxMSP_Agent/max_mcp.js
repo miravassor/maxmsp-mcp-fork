@@ -1053,10 +1053,27 @@ function get_patcher_context(request_id) {
         path.push(patcher_stack[i].name);
     }
 
+    // Patcher metadata from documented APIs
+    var openinpres = null;
+    try { openinpres = current_patcher.getattr("openinpresentation"); } catch (e) {}
+    var openrect = null;
+    try { openrect = current_patcher.getattr("openrect"); } catch (e) {}
+    var locked = false;
+    try { locked = current_patcher.locked; } catch (e) {}
+    var dirty = null;
+    try { if (current_patcher.wind) dirty = current_patcher.wind.dirty ? true : false; } catch (e) {}
+
     var context = {
         depth: patcher_stack.length,
         path: path,
-        is_root: (patcher_stack.length == 0)
+        is_root: (patcher_stack.length == 0),
+        name: current_patcher.name || "",
+        filepath: current_patcher.filepath || "",
+        openrect: openrect,
+        openinpresentation: openinpres,
+        locked: locked,
+        dirty: dirty,
+        object_count: current_patcher.count
     };
 
     var results = {"request_id": request_id, "results": context};

@@ -1019,10 +1019,12 @@ async def clear_console_buffer(ctx: Context):
 async def get_patcher_context(ctx: Context):
     """Get information about the current patcher navigation context.
 
-    Returns the depth (0 = root), path of subpatcher names, and whether at root.
+    Returns navigation state plus patcher metadata: presentation_rect (device
+    viewport bounds), openinpresentation (whether Presentation mode is enabled),
+    locked, dirty (unsaved changes), object_count, name, and filepath.
 
     Returns:
-        dict: Context info with 'depth', 'path' (list of varnames), and 'is_root'.
+        dict: Context info with depth, path, is_root, plus patcher metadata.
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
     payload = {"action": "get_patcher_context"}
