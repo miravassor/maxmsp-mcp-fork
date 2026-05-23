@@ -1001,7 +1001,10 @@ function get_objects_in_patch(request_id) {
     boxes = [];
     lines = [];
 
-    // Use apply (not applydeep) to only get objects in current patcher, not nested
+    // Two passes: first assign varnames to all unnamed objects, then collect.
+    // Single-pass missed patchlines when apply() visited the source before the
+    // destination had been auto-named (destination varname was empty → line skipped).
+    current_patcher.apply(assign_varnames);
     current_patcher.apply(collect_objects);
     var patcher_dict = {};
     patcher_dict["boxes"] = boxes;
@@ -1020,6 +1023,8 @@ function get_objects_in_selected(request_id) {
     boxes = [];
     lines = [];
 
+    // Ensure all objects have varnames before collecting selected subset
+    current_patcher.apply(assign_varnames);
     current_patcher.applyif(collect_objects, function (obj) {
         return obj.selected;
     });
@@ -1045,24 +1050,29 @@ function send_chunked_to_v8(action, request_id, json_str) {
     }
 }
 
-function collect_objects(obj) {
-    // Use obj.varname (direct property), NOT obj.getattr("varname").
-    // For bpatcher/jpatcher boxes, getattr routes through the inner patcher's
-    // attribute space and returns null — then the auto-naming overwrites the
-    // box's real scripting name. obj.varname reads the outer box correctly.
+// Pass 1: assign varnames to unnamed objects so patchline destinations are resolvable.
+// Uses obj.varname (direct property), NOT obj.getattr("varname") — for bpatcher/jpatcher
+// boxes, getattr routes through the inner patcher's attribute space and returns null.
+function assign_varnames(obj) {
     var varname = obj.varname;
     if (varname && String(varname).substring(0, 8) === "maxmcpid") {
         return;
     }
     if (!varname) {
-        // Skip over names already taken by other objects to avoid collisions
         while (current_patcher.getnamed("obj-" + obj_count)) {
             obj_count += 1;
         }
-        varname = "obj-" + obj_count;
-        obj.varname = varname;
+        obj.varname = "obj-" + obj_count;
     }
     obj_count += 1;
+}
+
+// Pass 2: collect box info and patchlines. All objects already have varnames.
+function collect_objects(obj) {
+    var varname = obj.varname;
+    if (varname && String(varname).substring(0, 8) === "maxmcpid") {
+        return;
+    }
 
     var patchcords = obj.patchcords;
     var outputs = (patchcords && patchcords.outputs) ? patchcords.outputs : [];

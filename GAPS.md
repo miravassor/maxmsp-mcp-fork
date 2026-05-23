@@ -121,9 +121,9 @@ No tool to change an existing object's varname. When two objects collide on auto
 
 **Fixed (2026-05-23):** Closed by §1.4 fix. Both tools now return `text`.
 
-### 3.3 🔄 OPEN — `get_object_connections` vs `get_objects_in_patch` lines list
+### 3.3 ✅ FIXED — `get_object_connections` vs `get_objects_in_patch` lines list
 
-After making connections, `get_object_connections` reflects them immediately, but the `lines` array in `get_objects_in_patch` sometimes doesn't include the same patchlines. Observed during the slew investigation (upstream session): `live.text → obj-53` was returned by `get_object_connections` but missing from the `lines` listing. Possibly a serialization timing issue, possibly the auto-naming asymmetry in `collect_objects` (line 1044 skips lines without a destination varname; `get_object_connections` doesn't).
+**Fixed (2026-05-23):** Root cause was a single-pass design: `collect_objects` assigned varnames and collected patchlines in one `apply()` pass. If `apply()` visited source A before destination B, and B had no varname yet, the A→B patchline was skipped (`dstobject.varname` was empty). Split into two passes: `assign_varnames` (names all unnamed objects) then `collect_objects` (collects boxes + patchlines). Both `get_objects_in_patch` and `get_objects_in_selected` use the two-pass approach.
 
 ### 3.4 ✅ MOSTLY FIXED — Varname-keyed lookups when varnames collide
 
@@ -269,7 +269,7 @@ When adding code for a fix, also update `CHANGES.md` per-iteration if it's a mea
 ## Prioritization (informal, as of 2026-05-22)
 
 Highest impact-per-effort, next quick wins:
-1. **§3.3** lines list divergence — investigate root cause (stale varnames were likely the culprit; may already be fixed by §4.3).
+1. **§1.8** `set_object_attribute` silently no-ops for patcher-level attributes on bpatchers.
 
 Higher-impact, more involved:
 - **§2.1** save tool — frequency 5/5, but needs M4L safety verification first.
@@ -281,4 +281,4 @@ Defer:
 - **§2.4** Presentation mode toggle — thispatcher hazard concerns.
 - **§4.5** position no-op detection — workaround already documented.
 
-Recently fixed (2026-05-23): §4.3 + §3.4 (varname clobbering/collisions), §3.1 + §4.4 (live.comment text), §1.4 + §3.2 (boxtext in get_object_attributes).
+Recently fixed (2026-05-23): §4.3 + §3.4 (varname clobbering/collisions), §3.1 + §4.4 (live.comment text), §1.4 + §3.2 (boxtext in get_object_attributes), §3.3 (patchline divergence).
