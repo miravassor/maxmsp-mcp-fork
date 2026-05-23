@@ -113,15 +113,11 @@ No tool to change an existing object's varname. When two objects collide on auto
 
 ## 3. Inconsistencies
 
-### 3.1 🔄 OPEN — `live.comment` text args silently dropped
+### 3.1 ✅ FIXED — `live.comment` text args silently dropped
 
-`add_max_object(obj_type="live.comment", args=["My label"])` runs without error but produces a box with **empty** `text` field. Args are silently discarded because `live.comment` defines no arg-consuming text contract.
+`add_max_object(obj_type="live.comment", args=["My label"])` previously produced a box with **empty** `text` field. Args were silently discarded because `live.comment` defines no arg-consuming text contract.
 
-Side effects:
-- The `patching_rect` width is wider than expected (args briefly affect layout even though they don't stick as displayed text).
-- Contrasts with plain `comment`, which DOES consume args as text — user reasonably expects `live.comment` to behave the same.
-
-Fix candidates: (a) detect `live.comment` in `add_max_object` and auto-emit `obj.message("set", args)` after creation; (b) error out at validation time; (c) document loudly.
+**Fixed (2026-05-23):** Added `live.comment` to the post-creation `set` dispatch in `add_object` (line 392) and to the `text` attr handling in `set_object_attribute` (line 639). Both now route `text` through `obj.message("set", args)`. Also fixed a missing `return` in `set_object_attribute` that caused the `text` set to fall through to "Attribute not found". Pairs with §4.4.
 
 ### 3.2 🔄 OPEN — `get_object_attributes` vs `get_objects_in_patch` content divergence
 
@@ -169,11 +165,9 @@ Two bugs in `collect_objects` (`max_mcp.js`):
 
 **Fix (2026-05-23):** Added `while (current_patcher.getnamed("obj-" + obj_count))` loop before assigning, skipping names that are already taken. Pairs with §3.4.
 
-### 4.4 🔄 OPEN — `set_object_attribute` for `text` on `live.comment`
+### 4.4 ✅ FIXED — `set_object_attribute` for `text` on `live.comment`
 
-Even though `text` doesn't appear in `get_object_attributes`'s output for `live.comment`, an attempt to `set_object_attribute(varname, "text", [...])` silently fails (currently posts "Attribute not found" but returns success-ish). Confusing because there's no listed attribute to set.
-
-Fix: add `live.comment` to the special-case list in `set_object_attribute` (alongside `message` and `comment`) so `text` routes to `obj.message("set", value)`. Pairs with §3.1.
+**Fixed (2026-05-23):** Added `live.comment` to the special-case list in `set_object_attribute` and added a missing `return` after the `set` call (previously fell through to "Attribute not found"). Pairs with §3.1.
 
 ### 4.5 🔄 OPEN — Position no-op on existing `function` / `bpatcher`
 
@@ -277,15 +271,16 @@ When adding code for a fix, also update `CHANGES.md` per-iteration if it's a mea
 ## Prioritization (informal, as of 2026-05-22)
 
 Highest impact-per-effort, next quick wins:
-1. **§3.1 + §4.4** `live.comment` text plumbing — two-line fix in the class-dispatch list of `add_max_object` + `set_object_attribute`.
-2. **§1.4 + §3.2** add box `text` to `get_object_attributes` — small additive change via v8.
+1. **§1.4 + §3.2** add box `text` to `get_object_attributes` — small additive change via v8.
 
 Higher-impact, more involved:
 - **§2.1** save tool — frequency 5/5, but needs M4L safety verification first.
 - **§N1** v8 nav silent failure — costs ~30 sec/session to work around. Real fix would help every session.
-- **§4.3 + §3.4** varname collision cluster — annoying when it bites.
+- **§3.3** lines list divergence between `get_objects_in_patch` and `get_object_connections`.
 
 Defer:
 - **§4.2** `[console]` auto-install — has trade-offs (modifies patcher state).
 - **§2.4** Presentation mode toggle — thispatcher hazard concerns.
 - **§4.5** position no-op detection — workaround already documented.
+
+Recently fixed (2026-05-23): §4.3 + §3.4 (varname clobbering/collisions), §3.1 + §4.4 (live.comment text).

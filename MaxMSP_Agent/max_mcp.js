@@ -389,7 +389,7 @@ function add_object(x, y, type, args, var_name, request_id) {
     }
 
     new_obj.varname = var_name;
-    if (type == "message" || type == "comment" || type == "flonum") {
+    if (type == "message" || type == "comment" || type == "live.comment" || type == "flonum") {
         new_obj.message("set", args);
     }
     // Auto-fit width based on text content
@@ -636,9 +636,10 @@ function disconnect_objects(src_varname, outlet_idx, dst_varname, inlet_idx) {
 function set_object_attribute(varname, attr_name, attr_value) {
     var obj = current_patcher.getnamed(varname);
     if (obj) {
-        if (obj.maxclass == "message" || obj.maxclass == "comment") {
+        if (obj.maxclass == "message" || obj.maxclass == "comment" || obj.maxclass == "live.comment") {
             if (attr_name == "text") {
                 obj.message("set", attr_value);
+                return;
             }
         }
         // Check if the attribute exists before setting it
