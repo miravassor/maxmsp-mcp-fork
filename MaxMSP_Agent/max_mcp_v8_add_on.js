@@ -4,6 +4,7 @@ inlets = 1; // Receive network messages here
 outlets = 2; // For status, responses, etc.
 
 // Patcher navigation state (mirrors max_mcp.js)
+var root_patcher = this.patcher;
 var current_patcher = this.patcher;
 var patcher_stack = [];
 
@@ -166,7 +167,9 @@ function v8_find_any_wind() {
     var fp = max.frontpatcher;
     if (fp && fp.wind) return { wind: fp.wind, pushed: null };
 
-    var p = this.patcher;
+    // Use root_patcher (captured at module scope), not this.patcher —
+    // in v8, 'this' inside a function doesn't refer to the Max JS context.
+    var p = root_patcher;
     var topmost_with_wind = null;
     while (p) {
         if (p.wind) topmost_with_wind = p;

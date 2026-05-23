@@ -179,13 +179,11 @@ Note: this is a Max behavior, not an MCP bug. The MCP could detect by reading ba
 
 These were not in the upstream gaps file but bit us during iterations 1 and 2.
 
-### N1 ⚠️ OPEN — v8 `nav_switch_to_patcher` silently fails when Max isn't foreground
+### N1 ✅ FIXED — v8 `nav_switch_to_patcher` silently fails when Max isn't foreground
 
-`v8_find_any_wind()` returns null when Max isn't the active app (`max.frontpatcher` is null), so `v8_find_patcher_by_name` returns null, and v8's `current_patcher` doesn't switch. No error is raised; subsequent lookups in v8 look up varnames in the wrong patcher.
+`v8_find_any_wind()` returned null when `max.frontpatcher` was null because the fallback used `this.patcher` inside a function — which doesn't resolve to the Max JS context in v8 (unlike classic js where `this` always refers to `jsthis`).
 
-**Workaround during development**: bring the target patcher window to front in Max before calling `switch_to_patcher(...)`.
-
-**Fix candidates**: send the patcher's filepath in addition to its name and have v8 cross-check via `parentpatcher` walks; or force a `bringtofront` of any window with `wind` available before reading `max.frontpatcher`.
+**Fixed (2026-05-23):** Added `root_patcher` variable (captured at module scope where `this.patcher` works) and used it in `v8_find_any_wind` instead of `this.patcher`. Mirrors the `root_patcher` pattern already in `max_mcp.js`. The `bringtofront` fallback now actually reaches a window.
 
 ### N2 ⚠️ DOCUMENTED — Max outlet symbol length limit silently drops large payloads
 
@@ -273,12 +271,11 @@ Highest impact-per-effort, next quick wins:
 
 Higher-impact, more involved:
 - **§2.1** save tool — frequency 5/5, but needs M4L safety verification first.
-- **§N1** v8 nav silent failure — costs ~30 sec/session to work around. Real fix would help every session.
-- **§3.3** lines list divergence between `get_objects_in_patch` and `get_object_connections`.
+- **§1.6** bpatcher outer-box attributes not exposed via get_object_attributes.
 
 Defer:
 - **§4.2** `[console]` auto-install — has trade-offs (modifies patcher state).
 - **§2.4** Presentation mode toggle — thispatcher hazard concerns.
 - **§4.5** position no-op detection — workaround already documented.
 
-Recently fixed (2026-05-23): §4.3 + §3.4 (varname clobbering/collisions), §3.1 + §4.4 (live.comment text), §1.4 + §3.2 (boxtext in get_object_attributes), §3.3 (patchline divergence).
+Recently fixed (2026-05-23): §4.3 + §3.4 (varname clobbering/collisions), §3.1 + §4.4 (live.comment text), §1.4 + §3.2 (boxtext in get_object_attributes), §3.3 (patchline divergence), §N1 (v8 nav failure).
