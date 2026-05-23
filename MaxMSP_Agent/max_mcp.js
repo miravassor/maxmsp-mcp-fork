@@ -912,10 +912,16 @@ function switch_to_patcher(request_id, patcher_name) {
 }
 
 function save_patcher(request_id) {
-    var tp = current_patcher.newdefault(0, 0, "thispatcher");
-    tp.varname = "maxmcpid_save_tmp";
-    tp.message("save");
-    current_patcher.remove(tp);
+    // Reuse existing thispatcher if present, otherwise create one.
+    // The maxmcpid prefix hides it from collect_objects.
+    // Message is "write" (not "save" — thispatcher has no save message).
+    // "write" resaves to the existing filepath without a dialog.
+    var tp = current_patcher.getnamed("maxmcpid_save_tmp");
+    if (!tp) {
+        tp = current_patcher.newdefault(0, 0, "thispatcher");
+        tp.varname = "maxmcpid_save_tmp";
+    }
+    tp.message("write");
 
     var result = {"request_id": request_id, "results": {
         "success": true,
