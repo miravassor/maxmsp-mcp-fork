@@ -812,6 +812,23 @@ async def set_parameter_property(ctx: Context, varname: str, key: str, value: li
 
 
 @mcp.tool()
+async def save_patcher(ctx: Context):
+    """Save the current patcher to disk.
+
+    Sends a save message via thispatcher. For M4L devices, this persists
+    all in-memory changes (including parameter property edits) to the .amxd file.
+    Equivalent to Cmd+S in the Max editor.
+
+    Returns:
+        dict: Success status with patcher name and filepath.
+    """
+    maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
+    payload = {"action": "save_patcher"}
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
+
+
+@mcp.tool()
 async def get_avoid_rect_position(ctx: Context):
     """When deciding the position to add a new object to the path, this rectangular area
     should be avoid. This is useful when you want to add an object to the patch without

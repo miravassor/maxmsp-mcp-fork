@@ -239,6 +239,13 @@ function anything() {
                 outlet(0, "error", "Missing request_id or patcher_name for switch_to_patcher");
             }
             break;
+        case "save_patcher":
+            if (data.request_id) {
+                save_patcher(data.request_id);
+            } else {
+                outlet(0, "error", "Missing request_id for save_patcher");
+            }
+            break;
         case "get_max_console":
             if (data.request_id) {
                 get_max_console(data.request_id, data.lines || 100);
@@ -900,6 +907,20 @@ function switch_to_patcher(request_id, patcher_name) {
         "success": true,
         "name": found.name,
         "filepath": found.filepath || "(unsaved)"
+    }};
+    outlet(1, "response", JSON.stringify(result, null, 0));
+}
+
+function save_patcher(request_id) {
+    var tp = current_patcher.newdefault(0, 0, "thispatcher");
+    tp.varname = "maxmcpid_save_tmp";
+    tp.message("save");
+    current_patcher.remove(tp);
+
+    var result = {"request_id": request_id, "results": {
+        "success": true,
+        "name": current_patcher.name || "(unnamed)",
+        "filepath": current_patcher.filepath || "(unsaved)"
     }};
     outlet(1, "response", JSON.stringify(result, null, 0));
 }

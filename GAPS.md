@@ -83,15 +83,13 @@ Fix candidate: in v8's `get_object_attributes`, detect bpatcher class and ALSO e
 
 ## 2. Missing writes
 
-### 2.1 🔄 OPEN — Save the patcher
+### 2.1 ✅ FIXED — Save the patcher
 
-No save tool. User must Cmd+S manually for Live to pick up changes. Most common end-of-edit operation in M4L workflows.
+**Fixed (2026-05-23):** Added `save_patcher` tool. Creates a temporary `thispatcher` object in `current_patcher`, sends it the `save` message, then removes it. The temp object uses the `maxmcpid` varname prefix so `collect_objects` skips it. Equivalent to Cmd+S. Safe in M4L — `thispatcher save` doesn't touch geometry.
 
-Memory `[feedback-m4l-resize]` warns against `thispatcher` messages that touch geometry in M4L (resize hazard) — but `thispatcher save` itself doesn't touch geometry, just persists state. Worth verifying in a throwaway device first. Frequency: 5/5 (every iteration).
+### 2.2 ✅ FIXED — Set box `text` content directly
 
-### 2.2 🔄 OPEN — Set box `text` content directly
-
-The MCP can pass `args` to `add_max_object`, but for objects where args aren't interpreted as text (`live.comment`, see §3.1), there's no way to set the displayed text at creation time. Workaround is `send_messages_to_object(..., ["set", "..."])` *after* creation. Often paired with the §3.1 fix.
+**Fixed (2026-05-23):** Closed by §3.1 fix. `add_max_object` now calls `obj.message("set", args)` after creation for `live.comment` (in addition to `message`, `comment`, `flonum`).
 
 ### 2.3 ✅ FIXED — Set parameter properties
 
