@@ -815,7 +815,7 @@ async def set_parameter_property(ctx: Context, varname: str, key: str, value: li
 async def save_patcher(ctx: Context):
     """Save the current patcher to disk.
 
-    Sends a save message via thispatcher. For M4L devices, this persists
+    Sends a write message via thispatcher. For M4L devices, this persists
     all in-memory changes (including parameter property edits) to the .amxd file.
     Equivalent to Cmd+S in the Max editor.
 

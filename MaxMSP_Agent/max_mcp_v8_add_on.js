@@ -736,6 +736,26 @@ function get_object_attributes_v8(request_id, var_name) {
     if (boxtext !== undefined && boxtext !== null) {
         attributes.text = boxtext;
     }
+    // Box-level attributes (presentation_rect, hidden, etc.) are separate
+    // from object attributes. For bpatchers, getattr reads the inner patcher;
+    // getboxattr reads the outer box — which is what users actually need.
+    try {
+        var boxattrnames = obj.getboxattrnames();
+        if (boxattrnames && boxattrnames.length > 0) {
+            var box_attrs = {};
+            for (var i = 0; i < boxattrnames.length; i++) {
+                var bname = boxattrnames[i];
+                if (!attributes.hasOwnProperty(bname)) {
+                    box_attrs[bname] = obj.getboxattr(bname);
+                }
+            }
+            if (Object.keys(box_attrs).length > 0) {
+                attributes.box_attrs = box_attrs;
+            }
+        }
+    } catch (e) {
+        // not all objects support getboxattr
+    }
     var param_info = build_parameter_info(obj);
     if (param_info) {
         attributes.parameter_info = param_info;

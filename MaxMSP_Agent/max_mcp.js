@@ -649,14 +649,22 @@ function set_object_attribute(varname, attr_name, attr_value) {
                 return;
             }
         }
-        // Check if the attribute exists before setting it
+        // Check object-level attributes first, then box-level attributes.
+        // For bpatchers, getattrnames() returns inner patcher attrs;
+        // getboxattrnames() returns the outer box attrs (presentation_rect, etc.).
         var attrnames = obj.getattrnames();
-        if (attrnames.indexOf(attr_name) == -1) {
-            post("Attribute not found: " + attr_name);
+        if (attrnames.indexOf(attr_name) !== -1) {
+            obj.setattr(attr_name, attr_value);
             return;
         }
-        // Set the attribute
-        obj.setattr(attr_name, attr_value);
+        try {
+            var boxattrnames = obj.getboxattrnames();
+            if (boxattrnames && boxattrnames.indexOf(attr_name) !== -1) {
+                obj.setboxattr(attr_name, attr_value);
+                return;
+            }
+        } catch (e) {}
+        post("Attribute not found: " + attr_name);
     } else {
         post("Object not found: " + varname);
     }
@@ -694,7 +702,7 @@ function send_bang_to_object(varname) {
 }
 
 function set_text_in_comment(varname, text) {
-    var obj = p.getnamed(varname);
+    var obj = current_patcher.getnamed(varname);
     if (obj) {
         if (obj.maxclass == "comment") {
             obj.message("set", text);

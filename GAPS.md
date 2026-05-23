@@ -51,33 +51,17 @@ Net effect: reordering outlets via `move_object` silently rotates which parent c
 
 Fix candidates: (a) when `move_object` is called on an `inlet`/`outlet` inside a subpatcher with live parent cords, WARN that indices may shift; (b) on `move_object`, auto-rewrite the parent's cord src/dst indices so cords follow the moved object visually (hard — Max may not expose this); (c) document loudly in the skill.
 
-### 1.8 ⚠️ OPEN — `set_object_attribute` silently no-ops for several patcher-level attributes
+### 1.8 ✅ FIXED — `set_object_attribute` silently no-ops for several patcher-level attributes
 
-`set_object_attribute("<bpatcher_varname>", "openinpresentation", [1])` reports success but the inner patcher's attribute stays at 0. Same for `varname` rename (the §2.5 case).
+**Fixed (2026-05-23):** Root cause was same as §1.6 — `getattrnames()` returns inner-patcher attrs for bpatchers, so box-level attrs like `presentation`, `hidden` weren't found. `set_object_attribute` now falls back to `getboxattrnames()`/`setboxattr()` when the attribute isn't in the object-level list.
 
-Empirically, the working workaround for `openinpresentation` is to:
-1. `enter_subpatcher(<bpatcher_varname>)`
-2. `add_max_object("thispatcher", varname="...")`
-3. `send_messages_to_object("...", ["openinpresentation", 1])`
-4. `exit_subpatcher()`
+Note: `openinpresentation` is a patcher-level attribute (not a box attribute), so it may still require the thispatcher workaround. The `setboxattr` path handles box-wrapper attrs like `presentation`, `presentation_rect`, `hidden`, `patching_rect`.
 
-This persists. So the underlying Max mechanism works fine via messages-to-thispatcher; the gap is that `set_object_attribute` doesn't route to it.
+### 1.6 ✅ FIXED — Bpatcher outer-box attributes not exposed
 
-Fix candidate: in `set_object_attribute`, when the target is a bpatcher and the attr is one of the inner-patcher-level keys (`openinpresentation`, `gridsize`, `bgcolor`, etc.), route via a temporary thispatcher message rather than a direct `obj.setattr`.
+**Fixed (2026-05-23):** Root cause discovered via API doc audit — Max has separate `getattr`/`getboxattr` APIs. `getattr` reads the object's attributes (inner patcher for bpatchers); `getboxattr` reads the box wrapper's attributes (presentation_rect, hidden, etc.). Added `getboxattrnames()`/`getboxattr()` pass in `get_object_attributes_v8` — outer-box attrs now appear under a `box_attrs` sub-dict. Also fixed `set_object_attribute` to fall back to `setboxattr` when `getattrnames` doesn't include the requested attribute (fixes §1.8 write-side).
 
-Related: §1.6 (read side of the same problem), §2.5 (varname rename specifically).
-
-### 1.6 ⚠️ OPEN — Bpatcher outer-box attributes not exposed
-
-`get_object_attributes(<bpatcher_varname>)` returns the **inner patcher's** attributes (gridsize, openrect, oscprefix, syntax colors, etc.) — NOT the outer box's attributes that live in the parent patcher (`presentation`, `presentation_rect`, `presentation_position`, `patching_rect`, `hidden`, etc.).
-
-This makes it impossible to read a bpatcher's positioning or visibility state via the MCP. Bit us 2026-05-22 when trying to mirror an existing bpatcher's presentation rect onto a replacement bpatcher — had to ask the user to read the values from the Inspector.
-
-Verified empirically: two bpatchers (one created via `jpatcher`, one via `bpatcher @embed 1`) returned **byte-identical** inner-patcher attribute dumps. Neither dump included `presentation_*` or `patching_rect`. The outer-box attrs only appear in `get_objects_in_patch` (which gives `patching_rect` per box), and even there `presentation_rect` / `presentation` / `hidden` are not returned.
-
-Related Max behavior (NOT an MCP gap): `jpatcher` and `bpatcher`, typed as class names, resolve to the **same underlying class**. What actually distinguishes a usable bpatcher from a useless empty box is the `@embed 1` argument, not the typed name. See user memory `[max-jpatcher-bpatcher-alias]`. `obj.maxclass` returns `"patcher"` (generic), `obj.getattr("maxclass")` returns `"jpatcher"` (inner patcher); neither returns `"bpatcher"`. After the §4.3 fix, `collect_objects` prefers `obj.maxclass` so bpatchers now report as `"patcher"` instead of `"jpatcher"` — marginally better but still not distinguishable from `p` subpatchers without checking other attrs.
-
-Fix candidate: in v8's `get_object_attributes`, detect bpatcher class and ALSO emit the outer box's attribute set (via `obj.box` or whatever the v8 path is to the box wrapper). Or expose them via a dedicated `get_box_attributes` tool. Pairs with §1.2 (patcher-level presentation_rect).
+Related Max behavior (NOT an MCP gap): `jpatcher` and `bpatcher`, typed as class names, resolve to the **same underlying class**. `obj.maxclass` returns `"patcher"` (generic), `obj.getattr("maxclass")` returns `"jpatcher"` (inner patcher).
 
 ---
 
