@@ -4,7 +4,7 @@ Master list of what this MCP doesn't expose, exposes inconsistently, or makes ha
 
 For per-iteration history of fixes, see [`CHANGES.md`](CHANGES.md). For the upstream-fork additions vs this fork's additions, see the README.
 
-**Last reviewed: 2026-05-23**
+**Last reviewed: 2026-05-24**
 
 ## Legend
 
@@ -27,9 +27,11 @@ The M4L parameter metadata (`_parameter_shortname`, `_parameter_longname`, `_par
 
 `presentation_rect` is a per-BOX attribute, not patcher-level. The patcher's own viewport bounds in an M4L device strip are a Live-level concept and may need LiveAPI to read. Added `openrect` (editor window rect) to `get_patcher_context` as a partial workaround.
 
-### 1.3 ✅ PARTIALLY FIXED — Current view mode (Patching vs Presentation)
+### 1.3 ✅ FIXED — Current view mode (Patching vs Presentation)
 
-**Fixed (2026-05-23):** `get_patcher_context` now returns `openinpresentation` (the saved default — whether the patcher opens in Presentation mode), `locked`, `dirty`, `openrect`, `object_count`, `name`, `filepath`. Note: `openinpresentation` is the saved preference, not necessarily the current view state. The JS API doesn't expose the live Patching-vs-Presentation toggle state.
+**Fixed (2026-05-23):** `get_patcher_context` now returns `openinpresentation`, `locked`, `dirty`, `openrect`, `object_count`, `name`, `filepath`.
+
+**Fixed (2026-05-24, audit BUG 4):** `set_presentation_mode` now calls `setattr("openinpresentation")` after the thispatcher message, so `get_patcher_context` reflects the current view state — not just the saved default.
 
 ### 1.4 ✅ FIXED — Box `text` field in `get_object_attributes`
 
@@ -38,6 +40,8 @@ The M4L parameter metadata (`_parameter_shortname`, `_parameter_longname`, `_par
 ### 1.5 ✅ PARTIALLY FIXED — Patcher's loadbang / device state
 
 **Fixed (2026-05-23):** `dirty` (unsaved changes) and `locked` state now in `get_patcher_context` via `Wind.dirty` and `Patcher.locked`. Device freeze state and device-type still not exposed (would need LiveAPI).
+
+**Fixed (2026-05-24, audit BUG 5):** `dirty` was always `false` after programmatic changes because `Wind.dirty` only tracks GUI edits. Added `mark_dirty()` helper that sends `thispatcher dirty` message after every write action. `dirty` now correctly reflects MCP modifications.
 
 ### 1.7 ⚠️ OPEN — Subpatcher inlet/outlet indices re-map on reposition; parent cords silently shift
 
@@ -175,6 +179,36 @@ Every time `max_mcp_v8_add_on.js` is reloaded, its module-scope `var current_pat
 
 **Documented in**: CHANGES.md "Engineering notes" → "v8 `current_patcher` resets on every reload".
 
+### N4 ✅ FIXED — `list_open_patchers` `is_current` always false
+
+**Discovered (2026-05-23, audit BUG 1):** `collect_all_patchers()` used `p === current_patcher` (JavaScript object identity) to set `is_current`. Window chain traversal returns fresh patcher wrapper objects that don't `===` match the stored reference, even for the same underlying patcher.
+
+**Fixed (2026-05-24):** Compare by `p.name + p.filepath` instead of `===`.
+
+### N5 ✅ FIXED — `get_objects_in_patch` `patching_rect` format inconsistency
+
+**Discovered (2026-05-23, audit BUG 2):** `collect_objects()` used `obj.rect` directly (documented as `[l,t,r,b]`) but labeled the output field `patching_rect` (convention is `[l,t,w,h]`). Meanwhile `get_object_attributes` returned `patching_rect` as `[l,t,w,h]` via `getboxattr`. The two tools returned incompatible formats for the same field.
+
+**Fixed (2026-05-24):** Convert `obj.rect` from `[l,t,r,b]` to `[l,t,w,h]` in `collect_objects()`. Both tools now return consistent `[left, top, width, height]`.
+
+### N6 ✅ FIXED — `get_avoid_rect_position` returns null for empty patchers
+
+**Discovered (2026-05-23, audit BUG 3):** When a patcher has 0 objects, `l/t/r/b` stay `undefined`. `JSON.stringify([undefined,...])` → `[null,...]`, which the Python server couldn't handle.
+
+**Fixed (2026-05-24):** Default to `[0, 0, 0, 0]` when no objects are found.
+
+### N7 ✅ FIXED — `object_count` off-by-1 vs `get_objects_in_patch`
+
+**Discovered (2026-05-23, audit BUG 6):** `get_patcher_context` used `patcher.count` (includes ALL objects) while `get_objects_in_patch` filters out `maxmcpid_*` system objects. The hidden `maxmcpid_save_tmp` thispatcher caused a +1 discrepancy.
+
+**Fixed (2026-05-24):** Subtract hidden `maxmcpid_*` objects from the count.
+
+### N8 ✅ FIXED — `set_parameter_property` soft failure on non-parameter objects
+
+**Discovered (2026-05-23, audit BUG 7):** Calling `set_parameter_property` on an object without `parameter_enable=1` would attempt `setattr`, get null readback, and return a vague "Readback differs" error.
+
+**Fixed (2026-05-24):** Added `parameter_enable` pre-check in `set_parameter_property_v8`. Returns a clear error immediately.
+
 ---
 
 ## 5. 🚫 Max quirks (not MCP-fault, reference only)
@@ -242,7 +276,7 @@ When the MCP itself gets touched:
 
 When adding code for a fix, also update `CHANGES.md` per-iteration if it's a meaningful unit of work.
 
-## Prioritization (as of 2026-05-23)
+## Prioritization (as of 2026-05-24)
 
 Remaining open (all low severity):
 - **§1.2** patcher presentation_rect — needs LiveAPI, not solvable via JS API alone.
@@ -251,3 +285,5 @@ Remaining open (all low severity):
 - **§4.5** position no-op on `function`/`bpatcher` — Max behavior; can detect and warn.
 
 Fixed 2026-05-23 (17 items): §4.3, §3.4, §3.1, §4.4, §1.4, §3.2, §3.3, §N1, §2.1, §2.2, §1.6, §1.8, §2.4, §2.5, §1.3, §1.5, plus API doc audit covering 19 pages.
+
+Fixed 2026-05-24 (7 items from full 38-tool audit): §N4 is_current, §N5 patching_rect format, §N6 empty patcher avoid_rect, §N7 object_count off-by-1, §N8 set_parameter_property pre-check, plus §1.3 openinpresentation sync (BUG 4), §1.5 dirty flag (BUG 5). See `AUDIT_2026-05-23.md` for full report.
