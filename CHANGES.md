@@ -390,3 +390,51 @@ Both instances of the feedback loop detector (in `run_signal_safety_for_add_obje
 | `check_signal_safety` on delay feedback loop | ✅ Returns `safe: true` with tapin~/tapout~/svf~/*~ in loop |
 | `set_parameter_property` wide ranges with Int type | ✅ [10, 1000] and [100, 15000] both succeed |
 | Full device (sandbox.amxd) | ✅ Saved, 4 parameters configured, presentation mode set up |
+
+---
+
+# Iteration 5 — `configure_parameter` bug fixes (2026-05-24)
+
+## Goal
+
+Test and fix `configure_parameter`, the batch parameter-write tool added in iteration 4's `max_mcp_v8_add_on.js`. Two bugs found and fixed.
+
+## Bugs found and fixed
+
+### BUG 1 — `configure_parameter` `properties` param typed as `str` instead of `dict`
+
+**Root cause** (`server.py:815`): `properties` was annotated as `str` with a `json.loads()` parsing step. MCP sends JSON natively — the value arrives as a pre-parsed dict, not a string. Pydantic rejected every call with `Input should be a valid string`.
+
+**Fix:** Changed `properties: str` → `properties: dict`, removed the redundant `json.loads()` step and error handling.
+
+### BUG 2 — Float clamp warning never fires on clamped range
+
+**Root cause** (`max_mcp_v8_add_on.js:922`): Warning checked `(r[1] - r[0]) > 255` but after Float-type clamping the resulting span is exactly 255 (e.g., requested [0, 500] → actual [0, 255]). The `>` missed this case.
+
+**Fix:** Changed `> 255` → `>= 255`.
+
+## Files changed (iteration 5)
+
+### `server.py`
+
+| Location | Change |
+|----------|--------|
+| `configure_parameter` (~line 815) | `properties: str` → `properties: dict`; removed `json.loads()` parsing |
+
+### `MaxMSP_Agent/max_mcp_v8_add_on.js`
+
+| Location | Change |
+|----------|--------|
+| `configure_parameter_v8` Float clamp warning (~line 922) | `> 255` → `>= 255` |
+
+## Test status (iteration 5)
+
+| Path | Status |
+|------|--------|
+| Happy path (3 properties) | ✅ All `success: true` |
+| Smart ordering (type before range) | ✅ `_parameter_type` applied first regardless of input order |
+| Invalid key rejection | ✅ `bogus_key` rejected, valid keys still applied |
+| Missing object | ✅ Returns `"error": "Object not found"` |
+| Float clamp detection | ✅ Range [0,500] clamped to [0,255], `success: false`, warning fires |
+| Float clamp warning text | ✅ "Float type clamps _parameter_range to 255 span…" |
+| Restore after tests | ✅ All parameters restored to original values |

@@ -215,6 +215,18 @@ Every time `max_mcp_v8_add_on.js` is reloaded, its module-scope `var current_pat
 
 **Fixed (2026-05-24):** Guard now accepts all 4 io_types.
 
+### N11 ✅ FIXED — `configure_parameter` rejects all calls (Pydantic validation error)
+
+**Discovered (2026-05-24):** `configure_parameter` in `server.py` typed `properties` as `str` with a `json.loads()` parsing step. MCP sends JSON natively — the value arrives as a pre-parsed dict. Pydantic rejected every call with "Input should be a valid string."
+
+**Fixed (2026-05-24):** Changed `properties: str` → `properties: dict`, removed redundant `json.loads()`.
+
+### N12 ✅ FIXED — `configure_parameter` Float clamp warning never fires
+
+**Discovered (2026-05-24):** The Float+wide-range warning in `configure_parameter_v8` checked `(r[1] - r[0]) > 255`. After Float-type clamping, the resulting span is exactly 255 (e.g., [0, 500] → [0, 255]). The strict `>` missed this boundary case.
+
+**Fixed (2026-05-24):** Changed `> 255` → `>= 255`.
+
 ### N10 ✅ FIXED — `check_signal_safety` false positive on delay feedback with intermediate objects
 
 **Discovered (2026-05-24):** The feedback loop detector only excused cycles where `tapout~` was the **direct predecessor** of `tapin~`. Standard delay feedback routes through intermediate processing (`tapout~ → svf~ → *~ → tapin~`), which was incorrectly flagged as dangerous. Both `run_signal_safety_for_add_object` and `check_signal_safety` had this bug.
@@ -305,3 +317,5 @@ Remaining open (all low severity):
 Fixed 2026-05-23 (17 items): §4.3, §3.4, §3.1, §4.4, §1.4, §3.2, §3.3, §N1, §2.1, §2.2, §1.6, §1.8, §2.4, §2.5, §1.3, §1.5, plus API doc audit covering 19 pages.
 
 Fixed 2026-05-24 (7 items from full 38-tool audit): §N4 is_current, §N5 patching_rect format, §N6 empty patcher avoid_rect, §N7 object_count off-by-1, §N8 set_parameter_property pre-check, plus §1.3 openinpresentation sync (BUG 4), §1.5 dirty flag (BUG 5). See `AUDIT_2026-05-23.md` for full report.
+
+Fixed 2026-05-24 (2 items from configure_parameter testing): §N11 properties type mismatch, §N12 Float clamp warning threshold.

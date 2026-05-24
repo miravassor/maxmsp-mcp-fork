@@ -78,6 +78,8 @@ Claude Code ←—MCP—→ server.py ←—Socket.IO:5002—→ max_mcp_node.js
 
 **Run `/maxmsp` skill before creating or modifying patches** — it contains all placement rules, object gotchas, and tool usage guidelines that MUST be followed.
 
+**Use `get_object_doc(name)` before connecting unfamiliar objects** — returns inlet/outlet count, signal types, and argument details from `docs.json` (1128 objects covered).
+
 ### Quick reminders (details in skill)
 
 - **CONSIDER SUBPATCHERS** for new functionality
@@ -108,7 +110,8 @@ M4L parameter introspection (read + write):
 - `get_object_attributes(varname)` — returns object attrs + `box_attrs` sub-dict (outer box) + `parameter_info` sub-dict + `text`
 - `get_parameter_info(varname)` — narrow read of just the `_parameter_*` metadata
 - `list_parameters()` — enumerate every Live parameter in the current patcher
-- `set_parameter_property(varname, key, value)` — write a `_parameter_*` attribute (whitelisted keys; persists to `.amxd` after save)
+- `set_parameter_property(varname, key, value)` — write a single `_parameter_*` attribute (whitelisted keys; persists to `.amxd` after save)
+- `configure_parameter(varname, properties)` — write multiple `_parameter_*` attributes in one call; smart ordering applies `_parameter_type`/`_parameter_steps` before `_parameter_range` to avoid Float clamp; warns if Float type + wide range detected
 
 These surface `_parameter_shortname`, `_parameter_longname`, `_parameter_type`, `_parameter_range`, `_parameter_modmode`, etc. — the M4L attrs that `getattrnames()` hides.
 

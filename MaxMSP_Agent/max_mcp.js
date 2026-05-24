@@ -145,6 +145,13 @@ function anything() {
                 outlet(0, "error", "Missing request_id, varname, key, or value for set_parameter_property");
             }
             break;
+        case "configure_parameter":
+            if (data.request_id && data.varname && data.properties) {
+                outlet(2, "configure_parameter", data.request_id, data.varname, JSON.stringify(data.properties));
+            } else {
+                outlet(0, "error", "Missing request_id, varname, or properties for configure_parameter");
+            }
+            break;
         case "get_avoid_rect_position":
             if (data.request_id) {
                 get_avoid_rect_position(data.request_id);
@@ -959,7 +966,7 @@ var WRITE_ACTIONS = {
     "add_object":1, "remove_object":1, "connect_objects":1, "disconnect_objects":1,
     "set_object_attribute":1, "set_message_text":1, "create_subpatcher":1,
     "add_subpatcher_io":1, "move_object":1, "recreate_with_args":1, "rename_object":1,
-    "autofit_existing":1, "encapsulate":1, "set_presentation_mode":1, "set_parameter_property":1
+    "autofit_existing":1, "encapsulate":1, "set_presentation_mode":1, "set_parameter_property":1, "configure_parameter":1
 };
 
 function get_or_create_thispatcher() {
@@ -1281,6 +1288,7 @@ function get_object_connections(request_id, var_name) {
             outputs.push({
                 src_outlet: out_cords[i].srcoutlet,
                 dst_varname: out_cords[i].dstobject.varname,
+                dst_maxclass: out_cords[i].dstobject.maxclass,
                 dst_inlet: out_cords[i].dstinlet
             });
         }
@@ -1292,6 +1300,7 @@ function get_object_connections(request_id, var_name) {
         for (var i = 0; i < in_cords.length; i++) {
             inputs.push({
                 src_varname: in_cords[i].srcobject.varname,
+                src_maxclass: in_cords[i].srcobject.maxclass,
                 src_outlet: in_cords[i].srcoutlet,
                 dst_inlet: in_cords[i].dstinlet
             });
@@ -1442,64 +1451,72 @@ function autofit_existing(var_name) {
 // ========================================
 // Signal safety analysis:
 
-function check_signal_safety(request_id) {
-    var warnings = [];
-    var signal_objects = {};  // varname -> {maxclass, args, boxtext}
-    var signal_connections = [];  // {src_varname, src_outlet, dst_varname, dst_inlet}
+function collect_signals(patcher, prefix) {
+    var signal_objects = {};
+    var signal_connections = [];
+    var objects_to_check = [];
 
-    // 1. Collect all signal objects and connections
-    current_patcher.apply(function(obj) {
+    patcher.apply(function(obj) {
         var mc = obj.maxclass;
         if (!mc || mc === "patchline") return;
+        if (mc.charAt(mc.length - 1) !== "~") return;
 
-        // Check if it's a signal object (ends with ~)
-        if (mc.charAt(mc.length - 1) === "~") {
-            var vn = obj.varname;
-            if (!vn) {
-                vn = "sig-" + Math.floor(Math.random() * 100000);
-                obj.varname = vn;
-            }
-            signal_objects[vn] = {
-                maxclass: mc,
-                varname: vn,
-                rect: obj.rect
-            };
+        var vn = obj.varname;
+        if (!vn) {
+            vn = "sig-" + Math.floor(Math.random() * 100000);
+            obj.varname = vn;
+        }
+        var full_vn = prefix + vn;
+        signal_objects[full_vn] = { maxclass: mc, varname: full_vn, rect: obj.rect };
+        if (mc === "*~" || mc === "comb~") objects_to_check.push(full_vn);
 
-            // Get connections
-            var out_cords = obj.patchcords.outputs;
-            if (out_cords) {
-                for (var i = 0; i < out_cords.length; i++) {
-                    var dst = out_cords[i].dstobject;
-                    var dst_mc = dst.maxclass;
-                    // Only track signal connections
-                    if (dst_mc && dst_mc.charAt(dst_mc.length - 1) === "~") {
-                        var dst_vn = dst.varname;
-                        if (!dst_vn) {
-                            dst_vn = "sig-" + Math.floor(Math.random() * 100000);
-                            dst.varname = dst_vn;
-                        }
-                        signal_connections.push({
-                            src_varname: vn,
-                            src_maxclass: mc,
-                            src_outlet: out_cords[i].srcoutlet,
-                            dst_varname: dst_vn,
-                            dst_maxclass: dst_mc,
-                            dst_inlet: out_cords[i].dstinlet
-                        });
+        var out_cords = obj.patchcords.outputs;
+        if (out_cords) {
+            for (var i = 0; i < out_cords.length; i++) {
+                var dst = out_cords[i].dstobject;
+                var dst_mc = dst.maxclass;
+                if (dst_mc && dst_mc.charAt(dst_mc.length - 1) === "~") {
+                    var dst_vn = dst.varname;
+                    if (!dst_vn) {
+                        dst_vn = "sig-" + Math.floor(Math.random() * 100000);
+                        dst.varname = dst_vn;
                     }
+                    signal_connections.push({
+                        src_varname: full_vn, src_maxclass: mc, src_outlet: out_cords[i].srcoutlet,
+                        dst_varname: prefix + dst_vn, dst_maxclass: dst_mc, dst_inlet: out_cords[i].dstinlet
+                    });
                 }
             }
         }
     });
+    return { signal_objects: signal_objects, signal_connections: signal_connections, objects_to_check: objects_to_check };
+}
 
-    // 2. Collect objects that need arg checking (route to v8)
-    var objects_to_check = [];
-    for (var vn in signal_objects) {
-        var obj = signal_objects[vn];
-        if (obj.maxclass === "*~" || obj.maxclass === "comb~") {
-            objects_to_check.push(vn);
-        }
-    }
+function collect_signals_recursive(patcher, prefix, depth) {
+    if (depth > 4) return { signal_objects: {}, signal_connections: [], objects_to_check: [] };
+    var result = collect_signals(patcher, prefix);
+
+    patcher.apply(function(obj) {
+        if (obj.maxclass !== "patcher") return;
+        var sub = obj.subpatcher();
+        if (!sub) return;
+        var sub_prefix = prefix + (obj.varname || "subpatch") + " > ";
+        var sub_result = collect_signals_recursive(sub, sub_prefix, depth + 1);
+        for (var k in sub_result.signal_objects) result.signal_objects[k] = sub_result.signal_objects[k];
+        result.signal_connections = result.signal_connections.concat(sub_result.signal_connections);
+        result.objects_to_check = result.objects_to_check.concat(sub_result.objects_to_check);
+    });
+    return result;
+}
+
+function check_signal_safety(request_id) {
+    var warnings = [];
+
+    // 1. Collect all signal objects and connections (recursing into subpatchers)
+    var collected = collect_signals_recursive(current_patcher, "", 0);
+    var signal_objects = collected.signal_objects;
+    var signal_connections = collected.signal_connections;
+    var objects_to_check = collected.objects_to_check;
 
     // 3. Build adjacency list for cycle detection
     var adj = {};  // src_varname -> [{dst_varname, dst_maxclass}]

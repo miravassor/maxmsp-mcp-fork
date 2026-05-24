@@ -118,6 +118,13 @@ function anything() {
                 set_parameter_property_v8(arguments[0], arguments[1], arguments[2], parsed_value);
             }
             break;
+        case "configure_parameter":
+            if (arguments.length >= 3) {
+                var parsed_props;
+                try { parsed_props = JSON.parse(arguments[2]); } catch (e) { parsed_props = {}; }
+                configure_parameter_v8(arguments[0], arguments[1], parsed_props);
+            }
+            break;
         default:
             // outlet(1, messagename, ...arguments);
             outlet(1, "response", arguments[1]);
@@ -819,6 +826,22 @@ function set_parameter_property_v8(request_id, varname, key, value) {
     // and need the bare string for setattr to match the documented call shape.
     var setval = (Array.isArray(value) && value.length === 1) ? value[0] : value;
 
+    // Pre-read for warning detection (before setattr changes state)
+    var warning = null;
+    if (key === "_parameter_type" && setval === 1) {
+        var pre_range;
+        try { pre_range = obj.getattr("_parameter_range"); } catch (e) {}
+        if (Array.isArray(pre_range) && pre_range.length === 2 && (pre_range[1] - pre_range[0]) > 255) {
+            warning = "Float type will clamp _parameter_range to 255 span. Use Int type (0) with _parameter_unitstyle for wide ranges.";
+        }
+    } else if (key === "_parameter_range" && Array.isArray(setval) && setval.length === 2 && (setval[1] - setval[0]) > 255) {
+        var pre_type;
+        try { pre_type = obj.getattr("_parameter_type"); } catch (e) {}
+        if (pre_type === 1) {
+            warning = "Float type limits _parameter_range to 255 span. Use Int type (0) with _parameter_unitstyle instead.";
+        }
+    }
+
     var threw = false, error_msg = null;
     try { obj.setattr(key, setval); } catch (e) { threw = true; error_msg = e.message || String(e); }
 
@@ -838,9 +861,73 @@ function set_parameter_property_v8(request_id, varname, key, value) {
             "success": success,
             "threw": threw,
             "error": error_msg,
+            "warning": warning,
             "note": success ? "Runtime updated. Save the patcher (Cmd+S) in Max to persist to disk." : "setattr did not produce the requested value. Readback differs."
         }
     };
+    outlet(1, "response", JSON.stringify(result));
+}
+
+function configure_parameter_v8(request_id, varname, properties) {
+    var obj = current_patcher.getnamed(varname);
+    if (!obj) {
+        var err = {"request_id": request_id, "results": {"error": "Object not found: " + varname}};
+        outlet(1, "response", JSON.stringify(err));
+        return;
+    }
+    var pe;
+    try { pe = obj.getattr("parameter_enable"); } catch(e) { pe = 0; }
+    if (!pe) {
+        var err = {"request_id": request_id, "results": {"error": "Object '" + varname + "' does not have parameter_enable=1."}};
+        outlet(1, "response", JSON.stringify(err));
+        return;
+    }
+
+    var results_per_key = [];
+    var all_success = true;
+    var warnings = [];
+
+    var keys = Object.keys(properties);
+    for (var i = 0; i < keys.length; i++) {
+        if (SETTABLE_PARAM_KEYS.indexOf(keys[i]) === -1) {
+            results_per_key.push({key: keys[i], success: false, error: "Not in allowed keys"});
+            all_success = false;
+            keys.splice(i, 1); i--;
+        }
+    }
+
+    // Sort: type and steps before range to avoid the Float clamp issue
+    var priority = {"_parameter_type": 0, "_parameter_steps": 1};
+    keys.sort(function(a, b) {
+        return (priority[a] !== undefined ? priority[a] : 50) - (priority[b] !== undefined ? priority[b] : 50);
+    });
+
+    for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        var val = properties[k];
+        var setval = (Array.isArray(val) && val.length === 1) ? val[0] : val;
+        var threw = false, err_msg = null;
+        try { obj.setattr(k, setval); } catch (e) { threw = true; err_msg = e.message || String(e); }
+        var after;
+        try { after = obj.getattr(k); } catch (e) { after = null; }
+        var ok = !threw && (JSON.stringify(after) === JSON.stringify(setval));
+        if (!ok) all_success = false;
+        results_per_key.push({key: k, requested: val, actual: after, success: ok, error: err_msg});
+    }
+
+    // Warn about Float + wide range
+    try {
+        var t = obj.getattr("_parameter_type");
+        var r = obj.getattr("_parameter_range");
+        if (t === 1 && Array.isArray(r) && r.length === 2 && (r[1] - r[0]) >= 255) {
+            warnings.push("Float type clamps _parameter_range to 255 span. Use Int type (0) with _parameter_unitstyle.");
+        }
+    } catch (e) {}
+
+    var result = {"request_id": request_id, "results": {
+        "varname": varname, "results_per_key": results_per_key,
+        "all_success": all_success, "warnings": warnings
+    }};
     outlet(1, "response", JSON.stringify(result));
 }
 

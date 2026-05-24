@@ -811,6 +811,33 @@ async def set_parameter_property(ctx: Context, varname: str, key: str, value: li
     return response
 
 
+@mcp.tool()
+async def configure_parameter(ctx: Context, varname: str, properties: dict):
+    """Set multiple M4L parameter properties on a live.* box in one call.
+
+    Applies all properties with smart ordering: _parameter_type and
+    _parameter_steps are applied before _parameter_range to avoid the
+    Float-type range clamping issue.
+
+    Args:
+        varname (str): Variable name of a parameter-enabled box.
+        properties (dict): Key-value pairs, e.g.
+            {"_parameter_shortname": "Time", "_parameter_type": 0,
+             "_parameter_range": [10, 1000], "_parameter_unitstyle": 2}
+
+    Returns:
+        dict: {results_per_key: [{key, requested, actual, success}, ...],
+               all_success: bool, warnings: [...]}
+    """
+    maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
+    payload = {
+        "action": "configure_parameter",
+        "varname": varname,
+        "properties": properties,
+    }
+    response = await maxmsp.send_request(payload, timeout=10.0)
+    return response
+
 
 @mcp.tool()
 async def save_patcher(ctx: Context):
