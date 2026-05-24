@@ -325,3 +325,68 @@ Seven bugs discovered. All fixed in commit `75e30cb`, verified live before commi
 | 7 bug fixes verified live | ✅ All confirmed working after JS reload |
 | Regression after fixes | ✅ Object creation, connections, parameter writes, format consistency all verified |
 | Data integrity | ✅ Sandbox restored to exact original state after full test cycle |
+
+---
+
+# Iteration 4 — M4L device build + bug fixes (2026-05-24)
+
+## Goal
+
+End-to-end stress test: build a real Max for Live Audio Effect device (`sandbox.amxd`) using maximum MCP tool coverage, verifying each call's behavior and output. Document bugs found and fix them.
+
+## Device built: Stereo Filter Delay
+
+A complete M4L Audio Effect with:
+- `plugin~` → `[p delay_fx]` subpatcher → `plugout~` stereo signal chain
+- 4 `live.dial` M4L parameters: Delay Time (10–1000ms), Feedback (0–95%), Filter Cutoff (100–15000 Hz), Dry/Wet (0–100%)
+- Inside subpatcher: dual-mono `tapin~/tapout~` delay with `svf~` lowpass filtering per channel, `*~` feedback, `scale`-based control mapping, dry/wet crossfade via `*~` multipliers summed at outlets
+- Presentation mode layout for Live device strip
+- All parameters configured with shortname, longname, type, range, initial, unitstyle, exponent
+
+## MCP tools exercised
+
+32+ distinct tool types called across ~120 individual calls. Every tool in the skill reference was used except `encapsulate`, `get_object_doc`, `list_all_objects`, `get_objects_in_selected`, `clear_console_buffer`, `clear_max_console`, `get_max_console`.
+
+## Bugs found and fixed
+
+### Bug 1 — `add_subpatcher_io` rejects `inlet~`/`outlet~` (FIXED)
+
+`max_mcp.js:1102` guard only accepted `"inlet"` and `"outlet"`, with a comment claiming "they auto-detect signal vs message." Verified against official docs: `inlet` and `inlet~` are **distinct Max object classes** — `inlet` is message-only, `inlet~` is signal-only. No auto-detection.
+
+**Fix:** Accept all 4 io_types: `inlet`, `outlet`, `inlet~`, `outlet~`. Removed incorrect comment.
+
+### Bug 2 — `_parameter_type` Float via setattr clamps `_parameter_range` to 255 span (DOCUMENTED)
+
+Setting `_parameter_type` to 1 (Float) via `setattr` triggers an internal side effect that clamps `_parameter_range` max to `min + 255`. This happens regardless of `_parameter_steps` or ordering. The official docs say Float type has "no range restriction" — but that applies to the Inspector/patcher JSON layer (`saved_attribute_attributes`), not the runtime `setattr` API.
+
+**Key finding:** keeping `_parameter_type` as 0 (Int) allows arbitrary range spans via `setattr`. Int type does NOT enforce the documented 256-value limit through this API. The correct approach for wide ranges:
+1. Keep `_parameter_type` as Int (0) — do NOT change to Float
+2. Set `_parameter_range` to the desired [min, max]
+3. Use `_parameter_unitstyle` for display formatting (2=ms, 3=Hz, 5=%)
+
+**Not an MCP bug** — Max runtime behavior. Workaround applied to the device.
+
+### Bug 3 — `check_signal_safety` false positive on valid delay feedback (FIXED)
+
+Both instances of the feedback loop detector (in `run_signal_safety_for_add_object` and `check_signal_safety`) only excused loops where `tapout~` was the **direct predecessor** of `tapin~`. Standard delay feedback routes through intermediate processing (filter, gain): `tapout~ → svf~ → *~ → tapin~`. These were flagged as dangerous.
+
+**Fix:** Changed both detectors to check for `tapin~` AND `tapout~` **anywhere** in the cycle path, not requiring direct adjacency.
+
+## Files changed (iteration 4)
+
+### `max_mcp.js`
+
+| Location | Change |
+|----------|--------|
+| `add_subpatcher_io` (~line 1102) | Accept `inlet~`/`outlet~` in addition to `inlet`/`outlet` |
+| `run_signal_safety_for_add_object` (~line 512) | Check for tapin~/tapout~ pair in cycle, not direct adjacency |
+| `check_signal_safety` (~line 1536) | Same fix as above |
+
+## Test status (iteration 4)
+
+| Path | Status |
+|------|--------|
+| `add_subpatcher_io` with `inlet~`/`outlet~` | ✅ Created successfully, verified via `get_object_attributes` (text shows `inlet~`/`outlet~`) |
+| `check_signal_safety` on delay feedback loop | ✅ Returns `safe: true` with tapin~/tapout~/svf~/*~ in loop |
+| `set_parameter_property` wide ranges with Int type | ✅ [10, 1000] and [100, 15000] both succeed |
+| Full device (sandbox.amxd) | ✅ Saved, 4 parameters configured, presentation mode set up |

@@ -509,19 +509,15 @@ function run_signal_safety_for_add_object(request_id, existing_warnings) {
         if (rec_stack[node]) {
             var cycle_start = path.indexOf(node);
             var cycle_path = path.slice(cycle_start);
-            var has_tapin = false, tapin_is_direct = false;
+            var has_tapin = false, has_tapout = false;
 
             for (var i = 0; i < cycle_path.length; i++) {
                 var curr_obj = signal_objects[cycle_path[i]];
-                if (curr_obj && curr_obj.maxclass === "tapin~") {
-                    has_tapin = true;
-                    var prev_idx = (i === 0) ? cycle_path.length - 1 : i - 1;
-                    var prev_obj = signal_objects[cycle_path[prev_idx]];
-                    if (prev_obj && prev_obj.maxclass === "tapout~") tapin_is_direct = true;
-                }
+                if (curr_obj && curr_obj.maxclass === "tapin~") has_tapin = true;
+                if (curr_obj && curr_obj.maxclass === "tapout~") has_tapout = true;
             }
 
-            if (!(has_tapin && tapin_is_direct)) {
+            if (!(has_tapin && has_tapout)) {
                 warnings.push({ type: "FEEDBACK_LOOP", message: "Dangerous feedback loop detected", objects: cycle_path });
             }
             return;
@@ -1100,9 +1096,8 @@ function get_patcher_context(request_id) {
 }
 
 function add_subpatcher_io(x, y, io_type, var_name, comment) {
-    // io_type should be "inlet" or "outlet" (they auto-detect signal vs message)
-    if (io_type != "inlet" && io_type != "outlet") {
-        post("Invalid io_type: " + io_type + ". Use inlet or outlet (no ~ needed, they auto-detect)\n");
+    if (io_type != "inlet" && io_type != "outlet" && io_type != "inlet~" && io_type != "outlet~") {
+        post("Invalid io_type: " + io_type + ". Use inlet, outlet, inlet~, or outlet~\n");
         return;
     }
 
@@ -1532,27 +1527,19 @@ function check_signal_safety(request_id) {
             var cycle_start = path.indexOf(node);
             var cycle_path = path.slice(cycle_start);
 
-            // Check if cycle goes through tapin~
+            // Check if cycle goes through a tapin~/tapout~ pair
             var has_tapin = false;
-            var tapin_is_direct_target = false;
+            var has_tapout = false;
 
             for (var i = 0; i < cycle_path.length; i++) {
                 var curr = cycle_path[i];
                 var curr_obj = signal_objects[curr];
-                if (curr_obj && curr_obj.maxclass === "tapin~") {
-                    has_tapin = true;
-                    // Check if the connection TO tapin~ is from tapout~
-                    var prev_idx = (i === 0) ? cycle_path.length - 1 : i - 1;
-                    var prev = cycle_path[prev_idx];
-                    var prev_obj = signal_objects[prev];
-                    if (prev_obj && prev_obj.maxclass === "tapout~") {
-                        tapin_is_direct_target = true;
-                    }
-                }
+                if (curr_obj && curr_obj.maxclass === "tapin~") has_tapin = true;
+                if (curr_obj && curr_obj.maxclass === "tapout~") has_tapout = true;
             }
 
-            if (has_tapin && tapin_is_direct_target) {
-                // Valid delay feedback - tapout~ connects directly to tapin~
+            if (has_tapin && has_tapout) {
+                // Valid delay feedback — tapin~/tapout~ pair with optional processing in the loop
                 return false;
             }
 

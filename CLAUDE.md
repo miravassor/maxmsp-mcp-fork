@@ -136,6 +136,8 @@ Reference: https://docs.cycling74.com/reference/thispatcher
 - **`obj.boxtext`** is V8-only — classic `js` engine doesn't have it.
 - **`this.patcher`** works at module scope in v8 but NOT inside functions. Use a module-scope `root_patcher` variable instead.
 - **`_parameter_*` attrs** work via `getattr`/`setattr` on `live.*` boxes with `parameter_enable=1`, even though hidden from `getattrnames()`. Undocumented but empirically verified. The official API is `ParameterInfoProvider` (hung in our test environment — may work after v8 nav fix).
+- **`_parameter_range` + `_parameter_type` interaction**: Setting `_parameter_type` to Float (1) via `setattr` clamps `_parameter_range` to a 255 span. Keep type as Int (0) for wide ranges; use `_parameter_unitstyle` for display formatting (2=ms, 3=Hz, 5=%). See GAPS.md §5.8.
+- **`inlet` vs `inlet~`** are distinct Max object classes. `inlet` handles messages only; `inlet~` handles signals only. No auto-detection. `add_subpatcher_io` accepts all 4 types: `inlet`, `outlet`, `inlet~`, `outlet~`.
 - **`wind.dirty`** only tracks GUI edits. The MCP uses `thispatcher dirty` message (via `mark_dirty()`) after write operations to keep it accurate.
 - **`apply()` traversal order** is not specified by the docs — do not rely on any particular order.
 - **JSON-stringify over outlet** instead of `Dict`/`outlet_dictionary()`: deliberate choice for consistency between classic js and v8 engines. See CHANGES.md "Deliberate departures" for rationale.

@@ -209,6 +209,18 @@ Every time `max_mcp_v8_add_on.js` is reloaded, its module-scope `var current_pat
 
 **Fixed (2026-05-24):** Added `parameter_enable` pre-check in `set_parameter_property_v8`. Returns a clear error immediately.
 
+### N9 ✅ FIXED — `add_subpatcher_io` rejects `inlet~` / `outlet~` signal I/O types
+
+**Discovered (2026-05-24):** `add_subpatcher_io` only accepted `"inlet"` and `"outlet"`, silently rejecting `"inlet~"` and `"outlet~"` with an incorrect comment ("they auto-detect signal vs message"). Official docs confirm `inlet` and `inlet~` are distinct classes — no auto-detection.
+
+**Fixed (2026-05-24):** Guard now accepts all 4 io_types.
+
+### N10 ✅ FIXED — `check_signal_safety` false positive on delay feedback with intermediate objects
+
+**Discovered (2026-05-24):** The feedback loop detector only excused cycles where `tapout~` was the **direct predecessor** of `tapin~`. Standard delay feedback routes through intermediate processing (`tapout~ → svf~ → *~ → tapin~`), which was incorrectly flagged as dangerous. Both `run_signal_safety_for_add_object` and `check_signal_safety` had this bug.
+
+**Fixed (2026-05-24):** Changed both detectors to check for `tapin~` AND `tapout~` anywhere in the cycle path.
+
 ---
 
 ## 5. 🚫 Max quirks (not MCP-fault, reference only)
@@ -247,9 +259,15 @@ Bit us this session: address-textedit edits weren't retargeting `sel` until we a
 
 `textedit` defaults to multi-line mode (`lines = 0`). Enter inserts a newline; the textedit doesn't fire its outlet. For a single-line input that submits on Enter, set `lines = 1`.
 
+### 5.8 `_parameter_type` Float via `setattr` clamps `_parameter_range` to 255 span
+
+Setting `_parameter_type` to 1 (Float) via `setattr` triggers an internal side effect that clamps `_parameter_range` max to `min + 255` on all `live.*` objects. The official docs say Float type has "no range restriction" — that applies to the Inspector/patcher-JSON layer, not the runtime `setattr` API.
+
+**Workaround:** keep `_parameter_type` as 0 (Int) when using `setattr` — Int type does NOT enforce the 256-value limit through this API. Use `_parameter_unitstyle` for display formatting (2=ms, 3=Hz, 5=%). Set range first, never change type to Float after.
+
 Bit us this session: users couldn't submit OSC address changes because Enter just added a return line.
 
-### 5.8 `jpatcher` and `bpatcher` are class aliases
+### 5.9 `jpatcher` and `bpatcher` are class aliases
 
 In Max's New Object box, typing `jpatcher` or `bpatcher` instantiates **the same underlying class**. Their attribute dumps via `get_object_attributes` are byte-identical (except an internal UID). What actually distinguishes a usable bpatcher from an empty no-op box is the `@embed 1` argument, NOT the typed class name.
 
