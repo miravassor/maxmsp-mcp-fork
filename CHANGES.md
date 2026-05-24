@@ -438,3 +438,108 @@ Test and fix `configure_parameter`, the batch parameter-write tool added in iter
 | Float clamp detection | ✅ Range [0,500] clamped to [0,255], `success: false`, warning fires |
 | Float clamp warning text | ✅ "Float type clamps _parameter_range to 255 span…" |
 | Restore after tests | ✅ All parameters restored to original values |
+
+---
+
+# Iteration 6 — Fire-and-forget → request/response + verification (2026-05-24)
+
+## Goal
+
+Upgrade the highest-impact fire-and-forget tools to request/response with validation and readback. Verify previously-untested tools and parameter property keys.
+
+## Changes
+
+### Phase 1 — `connect_max_objects` / `disconnect_max_objects` → request/response
+
+Both tools previously used `send_command` (fire-and-forget). Now use `send_request` with validation and readback.
+
+**server.py** (~lines 441, 469): `send_command` → `send_request(payload, timeout=5.0)`, added `return response`.
+
+**max_mcp.js** — `connect_objects()` / `disconnect_objects()`:
+- Added `request_id` parameter
+- Validate both objects exist via `getnamed()` before calling `patcher.connect()`/`disconnect()`
+- Verify cord exists/gone after operation via `patchcords.outputs` scan
+- Emit structured response with `{success, src, outlet, dst, inlet, error}`
+
+### Phase 2 — `remove_max_object` / `set_object_attribute` → request/response
+
+**server.py** (~lines 424, 503): same `send_command` → `send_request` pattern.
+
+**max_mcp.js** — `remove_object()`:
+- Validate object exists; remove; verify `getnamed` returns null after
+- Returns `{success, varname, error}`
+
+**max_mcp.js** — `set_object_attribute()`:
+- Validate object exists; read old value; set via `setattr`/`setboxattr`; read back new value
+- Returns `{success, varname, attr_name, old_value, new_value, method}` or `{error: "Attribute not found"}`
+- Text special case (message/comment/live.comment) preserved
+
+### Phase 3 — Verification of previously-untested tools
+
+No code changes. Empirical testing against running Max.
+
+## New finding — `_parameter_modmode` restricted in standalone Max
+
+`_parameter_modmode` values 1 (Unipolar), 2 (Bipolar), and 3 (Additive) silently reset to 0 via `setattr` in standalone Max. Only 0 (None) and 4 (Absolute) persist. Likely requires Ableton Live context for modulation-dependent modes.
+
+## Files changed (iteration 6)
+
+### `server.py`
+
+| Location | Change |
+|----------|--------|
+| `connect_max_objects` (~line 441) | `send_command` → `send_request`, return response |
+| `disconnect_max_objects` (~line 469) | `send_command` → `send_request`, return response |
+| `remove_max_object` (~line 424) | `send_command` → `send_request`, return response |
+| `set_object_attribute` (~line 503) | `send_command` → `send_request`, return response |
+
+### `MaxMSP_Agent/max_mcp.js`
+
+| Location | Change |
+|----------|--------|
+| Dispatcher cases for all 4 tools | Added `data.request_id` requirement |
+| `connect_objects()` (~line 652) | Full rewrite: validation + patchcord verification + response |
+| `disconnect_objects()` (~line 687) | Full rewrite: validation + patchcord verification + response |
+| `remove_object()` (~line 645) | Full rewrite: validation + removal verification + response |
+| `set_object_attribute()` (~line 722) | Full rewrite: validation + readback + response |
+
+## Test status (iteration 6)
+
+### Phase 1 — connect/disconnect
+
+| Path | Status |
+|------|--------|
+| Connect existing objects | ✅ `success: true`, verified via patchcords |
+| Connect nonexistent source | ✅ `error: "Source object not found"` |
+| Disconnect existing cord | ✅ `success: true`, verified cord removed |
+| Disconnect nonexistent source | ✅ `error: "Source object not found"` |
+| Reconnect after disconnect | ✅ `success: true` |
+| `get_object_connections` regression | ✅ No regression |
+
+### Phase 2 — remove/set_object_attribute
+
+| Path | Status |
+|------|--------|
+| `set_object_attribute` valid attr (bgcolor) | ✅ `success: true`, old/new values returned |
+| `set_object_attribute` nonexistent object | ✅ `error: "Object not found"` |
+| `set_object_attribute` bogus attribute | ✅ `error: "Attribute not found"` |
+| `remove_max_object` existing object | ✅ `success: true`, verified gone |
+| `remove_max_object` nonexistent | ✅ `error: "Object not found"` |
+
+### Phase 3 — previously-untested tools
+
+| Path | Status |
+|------|--------|
+| `set_parameter_property` `_parameter_range` | ✅ [0, 100] applied and read back |
+| `set_parameter_property` `_parameter_unitstyle` | ✅ 3 (Hz) applied |
+| `set_parameter_property` `_parameter_steps` | ✅ 50 applied |
+| `set_parameter_property` `_parameter_exponent` | ✅ 2 applied |
+| `set_parameter_property` `_parameter_invisible` | ✅ 1 applied |
+| `set_parameter_property` `_parameter_linknames` | ✅ 1 applied |
+| `set_parameter_property` `_parameter_initial` | ✅ 50 applied (no clamp observed) |
+| `set_parameter_property` `_parameter_modmode` | ⚠ 0,4 work; 1,2,3 silently reset to 0 |
+| `list_parameters()` | ✅ 4 params returned, content matches patcher state |
+| `check_signal_safety()` recursive | ✅ 14 signal objects across parent+subpatcher |
+| `get_objects_in_selected` (no selection) | ✅ Empty result, no error |
+| `encapsulate()` | ✅ 2 objects + 1 connection encapsulated correctly |
+| Restore after tests | ✅ All parameters restored to original values |

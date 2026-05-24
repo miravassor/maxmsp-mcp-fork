@@ -227,6 +227,24 @@ Every time `max_mcp_v8_add_on.js` is reloaded, its module-scope `var current_pat
 
 **Fixed (2026-05-24):** Changed `> 255` → `>= 255`.
 
+### N13 ✅ FIXED — `connect_max_objects` / `disconnect_max_objects` silent failure
+
+**Discovered (2026-05-24):** Both tools used `send_command` (fire-and-forget). If source/destination objects didn't exist or indices were wrong, the operation silently failed. LLMs couldn't distinguish success from failure.
+
+**Fixed (2026-05-24):** Upgraded to `send_request` with object existence validation via `getnamed()` and post-operation verification via `patchcords.outputs` scan. Returns `{success, src, outlet, dst, inlet, error}`.
+
+### N14 ✅ FIXED — `remove_max_object` silent failure
+
+**Discovered (2026-05-24):** Used `send_command` — removing a nonexistent object produced no error.
+
+**Fixed (2026-05-24):** Upgraded to `send_request`. Validates object exists, verifies removal via `getnamed()` readback. Returns `{success, varname, error}`.
+
+### N15 ✅ FIXED — `set_object_attribute` silent failure on invalid attributes
+
+**Discovered (2026-05-24):** Used `send_command` — setting a nonexistent attribute silently posted to Max console but returned nothing to the client. Setting an attribute on a nonexistent object also silent.
+
+**Fixed (2026-05-24):** Upgraded to `send_request`. Validates object exists, reads old value, sets, reads back new value. Returns `{success, attr_name, old_value, new_value, method}` or structured error. Reports "Attribute not found" for invalid attribute names.
+
 ### N10 ✅ FIXED — `check_signal_safety` false positive on delay feedback with intermediate objects
 
 **Discovered (2026-05-24):** The feedback loop detector only excused cycles where `tapout~` was the **direct predecessor** of `tapin~`. Standard delay feedback routes through intermediate processing (`tapout~ → svf~ → *~ → tapin~`), which was incorrectly flagged as dangerous. Both `run_signal_safety_for_add_object` and `check_signal_safety` had this bug.
@@ -279,13 +297,19 @@ Setting `_parameter_type` to 1 (Float) via `setattr` triggers an internal side e
 
 Bit us this session: users couldn't submit OSC address changes because Enter just added a return line.
 
-### 5.9 `jpatcher` and `bpatcher` are class aliases
+### 5.9a `jpatcher` and `bpatcher` are class aliases
 
 In Max's New Object box, typing `jpatcher` or `bpatcher` instantiates **the same underlying class**. Their attribute dumps via `get_object_attributes` are byte-identical (except an internal UID). What actually distinguishes a usable bpatcher from an empty no-op box is the `@embed 1` argument, NOT the typed class name.
 
 Bit us across two sessions: a `jpatcher` created without `@embed` looked indistinguishable from a working bpatcher but had no inner patcher to enter/edit.
 
-### 5.9 `set_parameter_property("_parameter_initial", x)` may silently clamp to range floor
+### 5.10 `_parameter_modmode` values 1-3 silently reset to 0 in standalone Max
+
+Setting `_parameter_modmode` via `setattr` to 1 (Unipolar), 2 (Bipolar), or 3 (Additive) silently resets to 0 (None). Only 0 and 4 (Absolute) persist. Likely requires Ableton Live context for modulation-dependent modes.
+
+Verified 2026-05-24 on `live.dial` in `sandbox.amxd` (standalone Max 9). The `setattr` call doesn't throw — it accepts the value but `getattr` reads back 0.
+
+### 5.9b `set_parameter_property("_parameter_initial", x)` may silently clamp to range floor
 
 Observed 2026-05-22: set `_parameter_range = [1024, 65535]`, then `_parameter_initial = 9000` (both reported success). On subsequent read, `_parameter_initial = 1024` (the range floor), not 9000.
 
@@ -319,3 +343,5 @@ Fixed 2026-05-23 (17 items): §4.3, §3.4, §3.1, §4.4, §1.4, §3.2, §3.3, §
 Fixed 2026-05-24 (7 items from full 38-tool audit): §N4 is_current, §N5 patching_rect format, §N6 empty patcher avoid_rect, §N7 object_count off-by-1, §N8 set_parameter_property pre-check, plus §1.3 openinpresentation sync (BUG 4), §1.5 dirty flag (BUG 5). See `AUDIT_2026-05-23.md` for full report.
 
 Fixed 2026-05-24 (2 items from configure_parameter testing): §N11 properties type mismatch, §N12 Float clamp warning threshold.
+
+Fixed 2026-05-24 (3 items from fire-and-forget upgrade): §N13 connect/disconnect silent failure, §N14 remove silent failure, §N15 set_object_attribute silent failure. New Max quirk documented: §5.10 modmode restriction.

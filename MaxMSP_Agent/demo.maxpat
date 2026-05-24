@@ -2927,8 +2927,6 @@
                                                     "saved_object_attributes": {
                                                         "autostart": 0,
                                                         "defer": 0,
-                                                        "node_bin_path": "",
-                                                        "npm_bin_path": "",
                                                         "watch": 0
                                                     },
                                                     "text": "node.script max_mcp_node.js",
@@ -3364,6 +3362,19 @@
                                     "rendermode": 0,
                                     "url": "file://n4m.monitor.html",
                                     "varname": "maxmcpid-143"
+                                }
+                            },
+                            {
+                                "box": {
+                                    "id": "obj-1",
+                                    "maxclass": "newobj",
+                                    "numinlets": 1,
+                                    "numoutlets": 2,
+                                    "outlettype": [ "", "" ],
+                                    "patching_rect": [ 0.0, 0.0, 100.0, 22.0 ],
+                                    "save": [ "#N", "thispatcher", ";", "#Q", "end", ";" ],
+                                    "text": "thispatcher",
+                                    "varname": "maxmcpid_save_tmp"
                                 }
                             }
                         ],
@@ -6424,8 +6435,6 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
-                                        "node_bin_path": "",
-                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script max_mcp_node.js",

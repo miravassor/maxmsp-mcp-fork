@@ -165,31 +165,31 @@ function anything() {
             }
             break;
         case "remove_object":
-            if (data.varname) {
-                remove_object(data.varname);
+            if (data.request_id && data.varname) {
+                remove_object(data.request_id, data.varname);
             } else {
-                outlet(0, "error", "Missing varname for remove_object");
+                outlet(0, "error", "Missing request_id or varname for remove_object");
             }
             break;
         case "connect_objects":
-            if (data.src_varname && data.dst_varname) {
-                connect_objects(data.src_varname, data.outlet_idx || 0, data.dst_varname, data.inlet_idx || 0);
+            if (data.request_id && data.src_varname && data.dst_varname) {
+                connect_objects(data.request_id, data.src_varname, data.outlet_idx || 0, data.dst_varname, data.inlet_idx || 0);
             } else {
-                outlet(0, "error", "Missing src_varname or dst_varname for connect_objects");
+                outlet(0, "error", "Missing request_id, src_varname or dst_varname for connect_objects");
             }
             break;
         case "disconnect_objects":
-            if (data.src_varname && data.dst_varname) {
-                disconnect_objects(data.src_varname, data.outlet_idx || 0, data.dst_varname, data.inlet_idx || 0);
+            if (data.request_id && data.src_varname && data.dst_varname) {
+                disconnect_objects(data.request_id, data.src_varname, data.outlet_idx || 0, data.dst_varname, data.inlet_idx || 0);
             } else {
-                outlet(0, "error", "Missing src_varname or dst_varname for disconnect_objects");
+                outlet(0, "error", "Missing request_id, src_varname or dst_varname for disconnect_objects");
             }
             break;
         case "set_object_attribute":
-            if (data.varname && data.attr_name && data.attr_value) {
-                set_object_attribute(data.varname, data.attr_name, data.attr_value);
+            if (data.request_id && data.varname && data.attr_name && data.attr_value) {
+                set_object_attribute(data.request_id, data.varname, data.attr_name, data.attr_value);
             } else {
-                outlet(0, "error", "Missing varname or attr_name for attr_value");
+                outlet(0, "error", "Missing request_id, varname, attr_name, or attr_value for set_object_attribute");
             }
             break;
         case "set_message_text":
@@ -642,53 +642,132 @@ function autofit_object(obj, type, args) {
     obj.rect = [rect[0], rect[1], rect[0] + calculated_width, rect[1] + height];
 }
 
-function remove_object(var_name) {
-	var obj = current_patcher.getnamed(var_name);
-    if (obj) {
-	    current_patcher.remove(obj);
+function remove_object(request_id, var_name) {
+    var obj = current_patcher.getnamed(var_name);
+    if (!obj) {
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Object not found: " + var_name}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
     }
+    current_patcher.remove(obj);
+    var still_exists = current_patcher.getnamed(var_name);
+    var r = {"request_id": request_id, "results": {
+        "success": !still_exists,
+        "varname": var_name,
+        "error": still_exists ? "Object still present after remove call" : null
+    }};
+    outlet(1, "response", JSON.stringify(r, null, 0));
 }
 
-function connect_objects(src_varname, outlet_idx, dst_varname, inlet_idx) {
+function connect_objects(request_id, src_varname, outlet_idx, dst_varname, inlet_idx) {
     var src = current_patcher.getnamed(src_varname);
+    if (!src) {
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Source object not found: " + src_varname}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
+    }
     var dst = current_patcher.getnamed(dst_varname);
+    if (!dst) {
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Destination object not found: " + dst_varname}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
+    }
     current_patcher.connect(src, outlet_idx, dst, inlet_idx);
-}
-
-function disconnect_objects(src_varname, outlet_idx, dst_varname, inlet_idx) {
-	var src = current_patcher.getnamed(src_varname);
-    var dst = current_patcher.getnamed(dst_varname);
-	current_patcher.disconnect(src, outlet_idx, dst, inlet_idx);
-}
-
-function set_object_attribute(varname, attr_name, attr_value) {
-    var obj = current_patcher.getnamed(varname);
-    if (obj) {
-        if (obj.maxclass == "message" || obj.maxclass == "comment" || obj.maxclass == "live.comment") {
-            if (attr_name == "text") {
-                obj.message("set", attr_value);
-                return;
+    var verified = false;
+    var out_cords = src.patchcords.outputs;
+    if (out_cords) {
+        for (var i = 0; i < out_cords.length; i++) {
+            if (out_cords[i].srcoutlet === outlet_idx &&
+                out_cords[i].dstobject.varname === dst_varname &&
+                out_cords[i].dstinlet === inlet_idx) {
+                verified = true;
+                break;
             }
         }
-        // Check object-level attributes first, then box-level attributes.
-        // For bpatchers, getattrnames() returns inner patcher attrs;
-        // getboxattrnames() returns the outer box attrs (presentation_rect, etc.).
-        var attrnames = obj.getattrnames();
-        if (attrnames.indexOf(attr_name) !== -1) {
-            obj.setattr(attr_name, attr_value);
+    }
+    var r = {"request_id": request_id, "results": {
+        "success": verified,
+        "src": src_varname, "outlet": outlet_idx,
+        "dst": dst_varname, "inlet": inlet_idx,
+        "error": verified ? null : "Connection not verified after connect call"
+    }};
+    outlet(1, "response", JSON.stringify(r, null, 0));
+}
+
+function disconnect_objects(request_id, src_varname, outlet_idx, dst_varname, inlet_idx) {
+    var src = current_patcher.getnamed(src_varname);
+    if (!src) {
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Source object not found: " + src_varname}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
+    }
+    var dst = current_patcher.getnamed(dst_varname);
+    if (!dst) {
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Destination object not found: " + dst_varname}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
+    }
+    current_patcher.disconnect(src, outlet_idx, dst, inlet_idx);
+    var still_connected = false;
+    var out_cords = src.patchcords.outputs;
+    if (out_cords) {
+        for (var i = 0; i < out_cords.length; i++) {
+            if (out_cords[i].srcoutlet === outlet_idx &&
+                out_cords[i].dstobject.varname === dst_varname &&
+                out_cords[i].dstinlet === inlet_idx) {
+                still_connected = true;
+                break;
+            }
+        }
+    }
+    var r = {"request_id": request_id, "results": {
+        "success": !still_connected,
+        "src": src_varname, "outlet": outlet_idx,
+        "dst": dst_varname, "inlet": inlet_idx,
+        "error": still_connected ? "Connection still present after disconnect call" : null
+    }};
+    outlet(1, "response", JSON.stringify(r, null, 0));
+}
+
+function set_object_attribute(request_id, varname, attr_name, attr_value) {
+    var obj = current_patcher.getnamed(varname);
+    if (!obj) {
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Object not found: " + varname}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
+    }
+    if ((obj.maxclass == "message" || obj.maxclass == "comment" || obj.maxclass == "live.comment") && attr_name == "text") {
+        obj.message("set", attr_value);
+        var r = {"request_id": request_id, "results": {"success": true, "varname": varname, "attr_name": attr_name, "method": "text_set"}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
+    }
+    var attrnames = obj.getattrnames();
+    if (attrnames.indexOf(attr_name) !== -1) {
+        var old_val;
+        try { old_val = obj.getattr(attr_name); } catch (e) { old_val = null; }
+        obj.setattr(attr_name, attr_value);
+        var new_val;
+        try { new_val = obj.getattr(attr_name); } catch (e) { new_val = null; }
+        var r = {"request_id": request_id, "results": {"success": true, "varname": varname, "attr_name": attr_name, "old_value": old_val, "new_value": new_val, "method": "setattr"}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
+    }
+    try {
+        var boxattrnames = obj.getboxattrnames();
+        if (boxattrnames && boxattrnames.indexOf(attr_name) !== -1) {
+            var old_val;
+            try { old_val = obj.getboxattr(attr_name); } catch (e) { old_val = null; }
+            obj.setboxattr(attr_name, attr_value);
+            var new_val;
+            try { new_val = obj.getboxattr(attr_name); } catch (e) { new_val = null; }
+            var r = {"request_id": request_id, "results": {"success": true, "varname": varname, "attr_name": attr_name, "old_value": old_val, "new_value": new_val, "method": "setboxattr"}};
+            outlet(1, "response", JSON.stringify(r, null, 0));
             return;
         }
-        try {
-            var boxattrnames = obj.getboxattrnames();
-            if (boxattrnames && boxattrnames.indexOf(attr_name) !== -1) {
-                obj.setboxattr(attr_name, attr_value);
-                return;
-            }
-        } catch (e) {}
-        post("Attribute not found: " + attr_name);
-    } else {
-        post("Object not found: " + varname);
-    }
+    } catch (e) {}
+    var r = {"request_id": request_id, "results": {"success": false, "error": "Attribute not found: " + attr_name, "varname": varname}};
+    outlet(1, "response", JSON.stringify(r, null, 0));
 }
 
 function set_message_text(varname, new_text) {

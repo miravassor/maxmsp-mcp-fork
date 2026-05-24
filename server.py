@@ -429,12 +429,14 @@ async def remove_max_object(
 
     Args:
         varname (str): Variable name for the object.
+
+    Returns:
+        dict: {success: bool, error: str | None}
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "remove_object"}
-    kwargs = {"varname": varname}
-    cmd.update(kwargs)
-    await maxmsp.send_command(cmd)
+    payload = {"action": "remove_object", "varname": varname}
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 @mcp.tool()
@@ -452,17 +454,20 @@ async def connect_max_objects(
         outlet_idx (int): Outlet index on the source object.
         dst_varname (str): Variable name of the destination object.
         inlet_idx (int): Inlet index on the destination object.
+
+    Returns:
+        dict: {success: bool, error: str | None}
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "connect_objects"}
-    kwargs = {
+    payload = {
+        "action": "connect_objects",
         "src_varname": src_varname,
         "outlet_idx": outlet_idx,
         "dst_varname": dst_varname,
         "inlet_idx": inlet_idx,
     }
-    cmd.update(kwargs)
-    await maxmsp.send_command(cmd)
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 @mcp.tool()
@@ -480,17 +485,20 @@ async def disconnect_max_objects(
         outlet_idx (int): Outlet index on the source object.
         dst_varname (str): Variable name of the destination object.
         inlet_idx (int): Inlet index on the destination object.
+
+    Returns:
+        dict: {success: bool, error: str | None}
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "disconnect_objects"}
-    kwargs = {
+    payload = {
+        "action": "disconnect_objects",
         "src_varname": src_varname,
         "outlet_idx": outlet_idx,
         "dst_varname": dst_varname,
         "inlet_idx": inlet_idx,
     }
-    cmd.update(kwargs)
-    await maxmsp.send_command(cmd)
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 @mcp.tool()
@@ -506,12 +514,19 @@ async def set_object_attribute(
         varname (str): Variable name of the object.
         attr_name (str): Name of the attribute to be set.
         attr_value (list): Values of the attribute to be set.
+
+    Returns:
+        dict: {success: bool, attr_name: str, old_value, new_value, error: str | None}
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "set_object_attribute"}
-    kwargs = {"varname": varname, "attr_name": attr_name, "attr_value": attr_value}
-    cmd.update(kwargs)
-    await maxmsp.send_command(cmd)
+    payload = {
+        "action": "set_object_attribute",
+        "varname": varname,
+        "attr_name": attr_name,
+        "attr_value": attr_value,
+    }
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 @mcp.tool()

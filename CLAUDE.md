@@ -58,7 +58,7 @@ Claude Code ←—MCP—→ server.py ←—Socket.IO:5002—→ max_mcp_node.js
 
 `server.py` uses two patterns for Max communication:
 
-- **`send_command(payload)`** — fire-and-forget. Used for write-only operations (`remove_object`, `connect_objects`, `set_object_attribute`, etc.). No response expected. These cannot report errors — verify with a read tool after critical operations.
+- **`send_command(payload)`** — fire-and-forget. Used for low-risk write operations (`set_message_text`, `send_bang_to_object`, `create_subpatcher`, etc.). No response expected. These cannot report errors — verify with a read tool after critical operations.
 - **`send_request(payload, timeout)`** — request/response with futures. Used when the tool needs data back (`get_objects_in_patch`, `add_object`, `get_parameter_info`, etc.). Each request gets a UUID; the Max side emits a `response` event matched by `request_id`.
 
 ### Cross-engine forwarding (classic js → v8)
@@ -102,7 +102,9 @@ See the `/maxmsp` skill for the placement formula (first object at `y = bottom +
 
 ## Key MCP tools
 
-Object manipulation: `get_avoid_rect_position()`, `add_max_object()`, `recreate_with_args()`, `move_object()`, `autofit_existing()`, `rename_object()`.
+Object manipulation: `get_avoid_rect_position()`, `add_max_object()`, `recreate_with_args()`, `move_object()`, `autofit_existing()`, `rename_object()`, `remove_max_object()`, `set_object_attribute()`.
+
+Connection management: `connect_max_objects()`, `disconnect_max_objects()`, `get_object_connections()`. All three return structured responses with success/error status.
 
 Patcher operations: `save_patcher()`, `set_presentation_mode()`, `get_patcher_context()` (returns name, filepath, openrect, locked, dirty, object_count, openinpresentation).
 
