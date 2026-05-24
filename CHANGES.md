@@ -242,6 +242,86 @@ Note: Max stores the saved attribute under the **non-underscore** name (`paramet
 ## Future work suggested
 
 - Augment `get_objects_in_patch` to also include `parameter_info` per box — would make patch dumps self-describing for M4L work. Trivial extension once the helper is in v8.
-- Fix the v8 nav-sync silent-failure (Known Issues item 1). Each iteration costs ~30 seconds of "click Everest_OSC to front" workaround. Could send the patcher's filepath in addition to its name and have v8 cross-check against `parentpatcher` walks before giving up.
 - Exercise the remaining `_parameter_*` write keys (ranges, modmode, initial, units) and confirm each persists. Likely all work the same way, but worth a quick batch test before relying on them.
 - `set_parameter_properties_batch(varname, dict)` — convenience tool that takes a dict of key/value pairs and applies them in one round trip. Useful when reconfiguring a parameter wholesale.
+
+---
+
+# Iteration 3 — Full 38-tool audit & bug fixes (2026-05-24)
+
+## Goal
+
+Systematic audit of every MCP tool against a live Max 9 sandbox (M4L Audio Effect). Test each tool for correctness, silent failures, data corruption, and unexpected side effects. Cross-reference against official Cycling '74 API docs.
+
+## Method
+
+Tested all 38 tools on `sandbox.amxd` in this order: read-only tools (baseline state), validation gates (11 rejection paths), write operations (create → verify → modify → verify → cleanup → verify restoration). Full report in `AUDIT_2026-05-23.md`.
+
+## Bugs found and fixed
+
+Seven bugs discovered. All fixed in commit `75e30cb`, verified live before commit.
+
+### BUG 1 — `list_open_patchers` `is_current` always false
+
+**Root cause** (`max_mcp.js:867`): `p === current_patcher` used JavaScript object identity. `wind.assoc` returns a fresh patcher wrapper on each traversal — not the same object reference stored by `switch_to_patcher`.
+
+**API evidence**: Official docs say `wind.assoc` returns a `Patcher` (read-only) with no identity guarantee across calls.
+
+**Fix**: Compare by `p.name === current_patcher.name && p.filepath === current_patcher.filepath`.
+
+### BUG 2 — `get_objects_in_patch` `patching_rect` format inconsistency
+
+**Root cause** (`max_mcp.js:1198`): Used `obj.rect` directly (documented as `[l,t,r,b]`) but labeled the field `patching_rect` (convention is `[l,t,w,h]`). `get_object_attributes` (via v8's `getboxattr`) returns `[l,t,w,h]` — two tools returned incompatible formats for the same field name.
+
+**API evidence**: Official docs: `rect` is `"(left, top, right, bottom)"`.
+
+**Fix**: Convert `obj.rect` from `[l,t,r,b]` to `[l,t,w,h]` in `collect_objects()`. Both tools now return consistent `[left, top, width, height]`.
+
+### BUG 3 — `get_avoid_rect_position` no output for empty patchers
+
+**Root cause** (`max_mcp.js:1237`): `l/t/r/b` stay `undefined` when 0 objects exist. `JSON.stringify([undefined,...])` → `[null,...]`.
+
+**Fix**: Default to `[0, 0, 0, 0]` when no objects found.
+
+### BUG 4 — `set_presentation_mode` doesn't update `openinpresentation`
+
+**Root cause** (`max_mcp.js:966`): `thispatcher.presentation` changes the view but doesn't update the patcher attribute. `get_patcher_context` reads the attribute, not the view state.
+
+**API evidence**: Official thispatcher docs: `presentation` — "will cause the patcher to enter or exit presentation mode" (view toggle, not attribute write). `openinpresentation` is undocumented as a patcher attribute.
+
+**Fix**: Add `current_patcher.setattr("openinpresentation", mode)` after the thispatcher message.
+
+### BUG 5 — `dirty` always false after programmatic changes
+
+**Root cause** (`max_mcp.js:1064`): Reads `wind.dirty` which only tracks GUI edits, not JS API changes.
+
+**API evidence**: Official thispatcher docs provide explicit `dirty`/`clean` messages: "sets the patch's dirty bit in the window."
+
+**Fix**: Added `mark_dirty()` helper that sends `thispatcher dirty` message. Called after every write action via a `WRITE_ACTIONS` dispatch table at the end of `anything()`. Also refactored `save_patcher`/`set_presentation_mode` to use shared `get_or_create_thispatcher()`.
+
+### BUG 6 — `object_count` off-by-1
+
+**Root cause**: `get_patcher_context` used `patcher.count` (all objects including hidden `maxmcpid_save_tmp`). `get_objects_in_patch` filters `maxmcpid_*` out.
+
+**Fix**: Subtract hidden `maxmcpid_*` objects from the count.
+
+### BUG 7 — `set_parameter_property` soft failure on non-parameter objects
+
+**Root cause**: No `parameter_enable` pre-check. `setattr` proceeds silently, readback returns null, user gets vague error.
+
+**Fix**: Added `parameter_enable` check in `set_parameter_property_v8` before attempting setattr. Returns clear error immediately.
+
+## Other changes in this iteration
+
+- **Skill rewrite** (`.claude/skills/maxmsp/SKILL.md`): Added missing validation gates (svf~, onepole~, comb~, times~, inverse math), complete 38-tool reference table, M4L parameter introspection section, signal processing guards, empty-patcher fallback. Removed fixed-bug workarounds after fixes were verified.
+- **GAPS.md**: Added N4-N8 as fixed items, updated §1.3 and §1.5 with BUG 4/5 fixes.
+
+## Test status (iteration 3)
+
+| Path | Status |
+|------|--------|
+| 38/38 tools tested | ✅ All functional |
+| 11 validation gates | ✅ All correct (no false accepts or rejects) |
+| 7 bug fixes verified live | ✅ All confirmed working after JS reload |
+| Regression after fixes | ✅ Object creation, connections, parameter writes, format consistency all verified |
+| Data integrity | ✅ Sandbox restored to exact original state after full test cycle |
