@@ -340,6 +340,10 @@ function anything() {
         default:
             outlet(0, "error", "Unknown action: " + data.action);
     }
+
+    if (WRITE_ACTIONS[data.action]) {
+        mark_dirty();
+    }
 }
 
 // function fetch_test(request_id) {
@@ -864,7 +868,7 @@ function collect_all_patchers() {
                 patcher: p,
                 name: p.name || "(unnamed)",
                 filepath: p.filepath || "(unsaved)",
-                is_current: (p === current_patcher)
+                is_current: (p.name === current_patcher.name && (p.filepath || "") === (current_patcher.filepath || ""))
             });
         }
         w = w.next;
@@ -955,15 +959,33 @@ function rename_object(request_id, varname, new_varname) {
     outlet(1, "response", JSON.stringify(result));
 }
 
-function set_presentation_mode(request_id, mode) {
-    // Reuse existing thispatcher or create one (maxmcpid prefix hides from collect_objects).
-    // Message is "presentation" followed by 0 or 1 (per thispatcher docs).
+var WRITE_ACTIONS = {
+    "add_object":1, "remove_object":1, "connect_objects":1, "disconnect_objects":1,
+    "set_object_attribute":1, "set_message_text":1, "create_subpatcher":1,
+    "add_subpatcher_io":1, "move_object":1, "recreate_with_args":1, "rename_object":1,
+    "autofit_existing":1, "encapsulate":1, "set_presentation_mode":1, "set_parameter_property":1
+};
+
+function get_or_create_thispatcher() {
     var tp = current_patcher.getnamed("maxmcpid_save_tmp");
     if (!tp) {
         tp = current_patcher.newdefault(0, 0, "thispatcher");
         tp.varname = "maxmcpid_save_tmp";
     }
+    return tp;
+}
+
+function mark_dirty() {
+    try {
+        var tp = get_or_create_thispatcher();
+        if (tp) tp.message("dirty");
+    } catch(e) {}
+}
+
+function set_presentation_mode(request_id, mode) {
+    var tp = get_or_create_thispatcher();
     tp.message("presentation", mode ? 1 : 0);
+    try { current_patcher.setattr("openinpresentation", mode ? 1 : 0); } catch(e) {}
     var result = {"request_id": request_id, "results": {
         "success": true,
         "mode": mode ? 1 : 0
@@ -972,15 +994,7 @@ function set_presentation_mode(request_id, mode) {
 }
 
 function save_patcher(request_id) {
-    // Reuse existing thispatcher if present, otherwise create one.
-    // The maxmcpid prefix hides it from collect_objects.
-    // Message is "write" (not "save" — thispatcher has no save message).
-    // "write" resaves to the existing filepath without a dialog.
-    var tp = current_patcher.getnamed("maxmcpid_save_tmp");
-    if (!tp) {
-        tp = current_patcher.newdefault(0, 0, "thispatcher");
-        tp.varname = "maxmcpid_save_tmp";
-    }
+    var tp = get_or_create_thispatcher();
     tp.message("write");
 
     var result = {"request_id": request_id, "results": {
@@ -1063,6 +1077,11 @@ function get_patcher_context(request_id) {
     var dirty = null;
     try { if (current_patcher.wind) dirty = current_patcher.wind.dirty ? true : false; } catch (e) {}
 
+    var hidden_count = 0;
+    current_patcher.apply(function(obj) {
+        if (obj.varname && String(obj.varname).substring(0, 8) === "maxmcpid") hidden_count++;
+    });
+
     var context = {
         depth: patcher_stack.length,
         path: path,
@@ -1073,7 +1092,7 @@ function get_patcher_context(request_id) {
         openinpresentation: openinpres,
         locked: locked,
         dirty: dirty,
-        object_count: current_patcher.count
+        object_count: current_patcher.count - hidden_count
     };
 
     var results = {"request_id": request_id, "results": context};
@@ -1192,10 +1211,12 @@ function collect_objects(obj) {
         }});
     }
 
+    var r = obj.rect;
+    var pr = (r && r.length >= 4) ? [r[0], r[1], r[2] - r[0], r[3] - r[1]] : r;
     boxes.push({box: {
         maxclass: obj.maxclass || obj.getattr("maxclass"),
         varname: varname,
-        patching_rect: obj.rect,
+        patching_rect: pr,
     }});
 }
 
@@ -1234,7 +1255,7 @@ function get_avoid_rect_position(request_id) {
             b = obj.rect[3];
         }
     });
-    var avoid_rect = [l, t, r, b];
+    var avoid_rect = (l === undefined) ? [0, 0, 0, 0] : [l, t, r, b];
 
     // Mark preflight check as done
     avoid_rect_called = true;

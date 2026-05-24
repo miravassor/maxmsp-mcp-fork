@@ -196,16 +196,8 @@ After writing, call `save_patcher()` to persist changes to the .amxd file.
 
 # Known Quirks & Workarounds
 
-**`get_avoid_rect_position()` in empty patchers**: Returns null values. Use `[50, 50]` as starting position.
+**`get_avoid_rect_position()` in empty patchers**: Returns `[0, 0, 0, 0]`. Use `[50, 50]` as starting position.
 
-**`patching_rect` format**: `get_objects_in_patch()` returns `obj.rect` which is documented as `[left, top, right, bottom]`. However, objects freshly created via the MCP return `[left, top, width, height]` until the patcher is saved and reloaded. Both formats can coexist in the same response. Use `get_object_attributes()` for reliable `[left, top, width, height]` via `getboxattr("patching_rect")`.
-
-**`list_open_patchers()` is_current**: Always returns `false` due to a patcher reference identity bug. Use `get_patcher_context()` to check which patcher is current.
-
-**`dirty` flag**: `get_patcher_context()` reports `dirty: false` even after programmatic changes. Max only sets the window dirty flag for GUI edits, not MCP operations.
-
-**`object_count` vs boxes**: `get_patcher_context().object_count` includes hidden MCP system objects. `get_objects_in_patch()` filters them out. Expect a difference of 1.
+**`patching_rect` format**: Both `get_objects_in_patch()` and `get_object_attributes()` return `patching_rect` as `[left, top, width, height]`.
 
 **Fire-and-forget commands**: `connect_max_objects`, `remove_max_object`, `set_object_attribute`, etc. return no output and cannot report errors. After critical operations, verify with `get_object_connections()` or `get_object_attributes()`.
-
-**`set_presentation_mode`**: Toggles the view but `get_patcher_context().openinpresentation` may not update (reads saved default, not live view state).

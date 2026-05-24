@@ -806,6 +806,14 @@ function set_parameter_property_v8(request_id, varname, key, value) {
         return;
     }
 
+    var pe;
+    try { pe = obj.getattr("parameter_enable"); } catch(e) { pe = 0; }
+    if (!pe) {
+        var err = {"request_id": request_id, "results": {"success": false, "error": "Object '" + varname + "' does not have parameter_enable=1. Only live.* objects with parameters can use set_parameter_property."}};
+        outlet(1, "response", JSON.stringify(err));
+        return;
+    }
+
     // Unwrap single-element lists to their bare value. _parameter_range and enum
     // lists stay as multi-element arrays; shortname/longname/etc come in as ["text"]
     // and need the bare string for setattr to match the documented call shape.
