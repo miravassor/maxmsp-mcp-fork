@@ -8,6 +8,7 @@ MCP server that lets LLMs programmatically create and manipulate Max/MSP patches
 
 - Per-iteration history + engineering notes: [`CHANGES.md`](CHANGES.md)
 - Open gaps, status, prioritization: [`GAPS.md`](GAPS.md)
+- Full 38-tool audit report: [`AUDIT_2026-05-23.md`](AUDIT_2026-05-23.md)
 - Fork heritage: see README.
 
 ## Development setup
@@ -57,7 +58,7 @@ Claude Code ←—MCP—→ server.py ←—Socket.IO:5002—→ max_mcp_node.js
 
 `server.py` uses two patterns for Max communication:
 
-- **`send_command(payload)`** — fire-and-forget. Used for write-only operations (`remove_object`, `connect_objects`, `set_object_attribute`, etc.). No response expected.
+- **`send_command(payload)`** — fire-and-forget. Used for write-only operations (`remove_object`, `connect_objects`, `set_object_attribute`, etc.). No response expected. These cannot report errors — verify with a read tool after critical operations.
 - **`send_request(payload, timeout)`** — request/response with futures. Used when the tool needs data back (`get_objects_in_patch`, `add_object`, `get_parameter_info`, etc.). Each request gets a UUID; the Max side emits a `response` event matched by `request_id`.
 
 ### Cross-engine forwarding (classic js → v8)
@@ -69,7 +70,7 @@ Claude Code ←—MCP—→ server.py ←—Socket.IO:5002—→ max_mcp_node.js
 ### Adding a new MCP tool — four-file template
 
 1. **`server.py`** — `@mcp.tool() async def name(ctx, args...)`. Build `payload = {"action": "...", ...}`, call `send_request` (or `send_command`), return response.
-2. **`max_mcp.js`** — `case "action_name":` in the `anything()` dispatcher. Inline the logic or forward to v8.
+2. **`max_mcp.js`** — `case "action_name":` in the `anything()` dispatcher. Inline the logic or forward to v8. If the action modifies the patcher, add it to the `WRITE_ACTIONS` table (triggers `mark_dirty()` automatically).
 3. **`max_mcp_v8_add_on.js`** — if v8-routed: `case "action_name":` in dispatcher + implementing function. Emit via `outlet(1, "response", split_long_string(...))`.
 4. **Documentation** — README tool table, CLAUDE.md if user-facing, CHANGES.md for iteration tracking.
 
@@ -131,8 +132,10 @@ Reference: https://docs.cycling74.com/reference/thispatcher
 - `dirty` / `clean` set/reset the dirty bit
 
 ### Other verified facts
+- **`obj.rect`** returns `[left, top, right, bottom]` per the docs. `get_objects_in_patch` converts to `[left, top, width, height]` for consistency with `get_object_attributes` (which reads via `getboxattr("patching_rect")`).
 - **`obj.boxtext`** is V8-only — classic `js` engine doesn't have it.
 - **`this.patcher`** works at module scope in v8 but NOT inside functions. Use a module-scope `root_patcher` variable instead.
 - **`_parameter_*` attrs** work via `getattr`/`setattr` on `live.*` boxes with `parameter_enable=1`, even though hidden from `getattrnames()`. Undocumented but empirically verified. The official API is `ParameterInfoProvider` (hung in our test environment — may work after v8 nav fix).
+- **`wind.dirty`** only tracks GUI edits. The MCP uses `thispatcher dirty` message (via `mark_dirty()`) after write operations to keep it accurate.
 - **`apply()` traversal order** is not specified by the docs — do not rely on any particular order.
 - **JSON-stringify over outlet** instead of `Dict`/`outlet_dictionary()`: deliberate choice for consistency between classic js and v8 engines. See CHANGES.md "Deliberate departures" for rationale.
