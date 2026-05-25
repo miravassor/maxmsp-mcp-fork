@@ -543,3 +543,34 @@ No code changes. Empirical testing against running Max.
 | `get_objects_in_selected` (no selection) | ✅ Empty result, no error |
 | `encapsulate()` | ✅ 2 objects + 1 connection encapsulated correctly |
 | Restore after tests | ✅ All parameters restored to original values |
+
+---
+
+# Phase 4 — ParameterInfoProvider spike (2026-05-25)
+
+## Goal
+
+Re-test the official `ParameterInfoProvider` (PIP) API, which hung in iteration 1. The hang may have been caused by the v8 nav bug (N1, fixed iteration 3). One clean attempt to determine if PIP is viable.
+
+## Protocol
+
+Added 4 temporary test actions (`test_pip_create`, `test_pip_getnames`, `test_pip_getinfo`, `test_pip_cleanup`) across all 3 files, each isolating one PIP call to pinpoint any hang. Tested against `sandbox.amxd` (4 live.dial parameters) with v8 synced via `switch_to_patcher`.
+
+## Results
+
+| Step | Result |
+|------|--------|
+| `test_pip_create` | ✅ No hang — PIP constructor returned immediately. Callback never fired (0 callbacks). |
+| `test_pip_getnames` | ⚠ Returned `null` — PIP sees 0 parameters (baseline `list_parameters` sees 4) |
+| `test_pip_getinfo("Dry/Wet")` | ⚠ Returned empty object — all documented fields (`type`, `min`, `max`, `longname`, etc.) undefined |
+| `test_pip_cleanup` | ✅ Cleaned up, 0 total callbacks received |
+
+## Root cause
+
+PIP is scoped to its hosting **patcher hierarchy** (confirmed by docs: "Provides a list of named parameter objects within a patcher hierarchy"). The v8 object lives in `demo.maxpat` (the MCP controller), which has zero parameters. `sandbox.amxd` (the target device) is a separate patcher hierarchy — not a parent/child of demo. PIP doesn't respect `current_patcher`; it only sees parameters in the hierarchy where the `js`/`v8` object is instantiated. Direct `getattr` works because we navigate to the target object via `current_patcher.getnamed(varname)` and call getattr on it directly.
+
+## Conclusion
+
+**Item closed permanently.** PIP is architecturally incompatible with our design (controller patcher separate from target patchers). The v8 nav fix did resolve the original hang, but PIP returns no useful data in our cross-patcher architecture. Direct `obj.getattr("_parameter_*")` remains the only viable approach.
+
+All spike code removed. No production code changes.

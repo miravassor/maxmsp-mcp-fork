@@ -70,7 +70,7 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 34.0, 121.0, 668.0, 801.0 ],
+                        "rect": [ 0.0, 26.0, 668.0, 801.0 ],
                         "showontab": 2,
                         "boxes": [
                             {
@@ -2927,6 +2927,8 @@
                                                     "saved_object_attributes": {
                                                         "autostart": 0,
                                                         "defer": 0,
+                                                        "node_bin_path": "",
+                                                        "npm_bin_path": "",
                                                         "watch": 0
                                                     },
                                                     "text": "node.script max_mcp_node.js",
@@ -3466,7 +3468,7 @@
                             "modernui": 1
                         },
                         "classnamespace": "box",
-                        "rect": [ 0.0, 26.0, 668.0, 801.0 ],
+                        "rect": [ 34.0, 121.0, 668.0, 801.0 ],
                         "showontab": 2,
                         "boxes": [
                             {
@@ -6435,6 +6437,8 @@
                                     "saved_object_attributes": {
                                         "autostart": 0,
                                         "defer": 0,
+                                        "node_bin_path": "",
+                                        "npm_bin_path": "",
                                         "watch": 0
                                     },
                                     "text": "node.script max_mcp_node.js",

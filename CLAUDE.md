@@ -51,15 +51,15 @@ Claude Code ←—MCP—→ server.py ←—Socket.IO:5002—→ max_mcp_node.js
 
 - `server.py` (~1300 lines) — Python FastMCP server. Defines all MCP tools, handles validation (float enforcement, dial rejection, trigger acknowledgment, etc.), and communicates with Max via Socket.IO.
 - `max_mcp_node.js` — Node.js bridge inside Max's `node.script`. Relays Socket.IO messages between the Python server and the Max-side JS objects.
-- `max_mcp.js` (~1900 lines) — Classic JS engine (`js` object). Main dispatcher: handles most operations inline, forwards v8-dependent ones via `outlet(2, ...)`.
-- `max_mcp_v8_add_on.js` (~870 lines) — V8 engine (`v8` object). Handles operations needing `obj.boxtext` (encapsulate, autofit), M4L parameter introspection, and box-level attribute access (`getboxattr`/`setboxattr`).
+- `max_mcp.js` (~2000 lines) — Classic JS engine (`js` object). Main dispatcher: handles most operations inline, forwards v8-dependent ones via `outlet(2, ...)`.
+- `max_mcp_v8_add_on.js` (~960 lines) — V8 engine (`v8` object). Handles operations needing `obj.boxtext` (encapsulate, autofit), M4L parameter introspection, and box-level attribute access (`getboxattr`/`setboxattr`).
 
 ### Communication patterns
 
 `server.py` uses two patterns for Max communication:
 
-- **`send_command(payload)`** — fire-and-forget. Used for low-risk write operations (`set_message_text`, `send_bang_to_object`, `create_subpatcher`, etc.). No response expected. These cannot report errors — verify with a read tool after critical operations.
-- **`send_request(payload, timeout)`** — request/response with futures. Used when the tool needs data back (`get_objects_in_patch`, `add_object`, `get_parameter_info`, etc.). Each request gets a UUID; the Max side emits a `response` event matched by `request_id`.
+- **`send_command(payload)`** — fire-and-forget. Used for low-risk write operations (`set_message_text`, `send_bang_to_object`, `create_subpatcher`, subpatcher navigation, `add_subpatcher_io`, `autofit_existing`). No response expected. These cannot report errors — verify with a read tool after critical operations.
+- **`send_request(payload, timeout)`** — request/response with futures. Used for reads and validated writes (`add_object`, `connect/disconnect`, `remove_max_object`, `set_object_attribute`, all parameter tools, etc.). Each request gets a UUID; the Max side emits a `response` event matched by `request_id`. Returns structured `{success, ..., error?}`.
 
 ### Cross-engine forwarding (classic js → v8)
 
@@ -108,6 +108,12 @@ Connection management: `connect_max_objects()`, `disconnect_max_objects()`, `get
 
 Patcher operations: `save_patcher()`, `set_presentation_mode()`, `get_patcher_context()` (returns name, filepath, openrect, locked, dirty, object_count, openinpresentation).
 
+Subpatcher navigation: `create_subpatcher()`, `enter_subpatcher()`, `exit_subpatcher()`, `enter_parent_patcher()`, `add_subpatcher_io()`, `switch_to_patcher()`.
+
+Messaging: `set_message_text()`, `send_bang_to_object()`, `send_messages_to_object()`, `set_number()`.
+
+Analysis & reference: `check_signal_safety()` (recursive across subpatchers), `encapsulate()`, `get_object_doc()` (1128 objects in `docs.json`), `get_objects_in_selected()`.
+
 M4L parameter introspection (read + write):
 - `get_object_attributes(varname)` — returns object attrs + `box_attrs` sub-dict (outer box) + `parameter_info` sub-dict + `text`
 - `get_parameter_info(varname)` — narrow read of just the `_parameter_*` metadata
@@ -116,6 +122,8 @@ M4L parameter introspection (read + write):
 - `configure_parameter(varname, properties)` — write multiple `_parameter_*` attributes in one call; smart ordering applies `_parameter_type`/`_parameter_steps` before `_parameter_range` to avoid Float clamp; warns if Float type + wide range detected
 
 These surface `_parameter_shortname`, `_parameter_longname`, `_parameter_type`, `_parameter_range`, `_parameter_modmode`, etc. — the M4L attrs that `getattrnames()` hides.
+
+`_parameter_type` encoding: `0`=Int, `1`=Float, `2`=Enum (where `_parameter_range` is the list of enum item names), `3`=Blob.
 
 ## Max API notes (verified against official docs)
 
@@ -140,8 +148,9 @@ Reference: https://docs.cycling74.com/reference/thispatcher
 - **`obj.rect`** returns `[left, top, right, bottom]` per the docs. `get_objects_in_patch` converts to `[left, top, width, height]` for consistency with `get_object_attributes` (which reads via `getboxattr("patching_rect")`).
 - **`obj.boxtext`** is V8-only — classic `js` engine doesn't have it.
 - **`this.patcher`** works at module scope in v8 but NOT inside functions. Use a module-scope `root_patcher` variable instead.
-- **`_parameter_*` attrs** work via `getattr`/`setattr` on `live.*` boxes with `parameter_enable=1`, even though hidden from `getattrnames()`. Undocumented but empirically verified. The official API is `ParameterInfoProvider` (hung in our test environment — may work after v8 nav fix).
+- **`_parameter_*` attrs** work via `getattr`/`setattr` on `live.*` boxes with `parameter_enable=1`, even though hidden from `getattrnames()`. Undocumented but empirically verified. The official API (`ParameterInfoProvider`) was re-tested after the v8 nav fix — it no longer hangs, but returns no data because PIP is scoped to its hosting "patcher hierarchy" (per docs). Our v8 lives in `demo.maxpat`; target devices are separate hierarchies. **Item closed permanently** — direct getattr is the only viable cross-patcher approach.
 - **`_parameter_range` + `_parameter_type` interaction**: Setting `_parameter_type` to Float (1) via `setattr` clamps `_parameter_range` to a 255 span. Keep type as Int (0) for wide ranges; use `_parameter_unitstyle` for display formatting (2=ms, 3=Hz, 5=%). See GAPS.md §5.8.
+- **`_parameter_modmode` restricted in standalone Max**: Values 1 (Unipolar), 2 (Bipolar), 3 (Additive) silently reset to 0 via `setattr`. Only 0 (None) and 4 (Absolute) persist. Likely requires Ableton Live context for modulation-dependent modes.
 - **`inlet` vs `inlet~`** are distinct Max object classes. `inlet` handles messages only; `inlet~` handles signals only. No auto-detection. `add_subpatcher_io` accepts all 4 types: `inlet`, `outlet`, `inlet~`, `outlet~`.
 - **`wind.dirty`** only tracks GUI edits. The MCP uses `thispatcher dirty` message (via `mark_dirty()`) after write operations to keep it accurate.
 - **`apply()` traversal order** is not specified by the docs — do not rely on any particular order.
