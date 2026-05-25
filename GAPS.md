@@ -49,7 +49,9 @@ Inside a subpatcher (`p` or bpatcher), `inlet`/`outlet` objects are indexed by t
 
 Net effect: reordering outlets via `move_object` silently rotates which parent cords carry which payload. Symptoms: "the bpatcher is wired but everything goes to the wrong destination." Bit us twice this session — once when the outlets got positioned right-to-left initially, and again after a `move_object` that thought it was un-rotating things but actually shifted them by one position because the cords didn't follow.
 
-**Partial fix (2026-05-25):** `move_object` now detects inlet/outlet/inlet~/outlet~ maxclass and returns a `warning` field in the response explaining the index remapping risk. The move still executes — the warning tells the LLM to verify parent connections afterward. Official Max docs (cycling74.com) do not document this index-by-x-position behavior at all.
+This is standard Max behavior — spatial position determines execution and index order throughout Max (per docs: "messages are generated based on the spatial organization of the objects in the patcher"). The subpatchers user guide confirms: "if you swap the position of two inlet objects in the subpatcher, those objects will map to different inlets in the parent subpatcher object." There is no `index` attribute on inlet/outlet objects — x-position IS the index. To read the current order: sort I/O objects by `patching_rect[0]`.
+
+**Partial fix (2026-05-25):** `move_object` now detects inlet/outlet/inlet~/outlet~ maxclass and returns a `warning` field in the response explaining the index remapping risk. The move still executes — the warning tells the LLM to verify parent connections afterward. Empirically confirmed: swapping `in_L`/`in_R` x-positions inside `delay_fx` in `sandbox.amxd` caused parent cord indices to shift.
 
 Remaining: auto-rewriting parent cord indices to follow the moved object (option b) is not implemented — Max may not expose the parent's cord topology from inside the subpatcher.
 

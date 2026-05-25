@@ -1512,6 +1512,25 @@ function move_object(request_id, var_name, x, y) {
     var new_rect = [x, y, x + width, y + height];
     obj.rect = new_rect;
 
+    var io_order = null;
+    if (is_io) {
+        var is_inlet = (mc === "inlet" || mc === "inlet~");
+        var io_list = [];
+        current_patcher.apply(function(o) {
+            var omc = o.maxclass;
+            if (is_inlet ? (omc === "inlet" || omc === "inlet~") : (omc === "outlet" || omc === "outlet~")) {
+                var r = o.rect;
+                io_list.push({varname: o.varname || "", maxclass: omc, x: r[0]});
+            }
+        });
+        io_list.sort(function(a, b) { return a.x - b.x; });
+        io_order = [];
+        for (var i = 0; i < io_list.length; i++) {
+            io_list[i].index = i;
+            io_order.push(io_list[i]);
+        }
+    }
+
     var results = {
         "request_id": request_id,
         "results": {
@@ -1519,7 +1538,8 @@ function move_object(request_id, var_name, x, y) {
             "varname": var_name,
             "old_position": [rect[0], rect[1]],
             "new_position": [x, y],
-            "warning": is_io ? "Moving " + mc + " objects changes their index order (determined by left-to-right x-position). Parent patchcords stay attached to the same index, not the same object. Verify parent connections after this move." : null
+            "warning": is_io ? "Moving " + mc + " objects changes their index order (determined by left-to-right x-position). Parent patchcords stay attached to the same index, not the same object. Verify parent connections after this move." : null,
+            "io_order": io_order
         }
     };
     outlet(1, "response", JSON.stringify(results, null, 0));

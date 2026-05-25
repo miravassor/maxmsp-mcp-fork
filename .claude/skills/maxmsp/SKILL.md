@@ -104,6 +104,8 @@ connect_max_objects("source", 0, "varname", 0)   -- connect from parent
 
 Navigation stack tracks depth. `get_patcher_context()` returns current depth, path, name, and metadata.
 
+**Inlet/outlet ordering**: Inside subpatchers, inlet and outlet objects are indexed by their **left-to-right x-position** — position IS the index, there is no separate index attribute. This is standard Max spatial ordering (per docs: "messages are generated based on the spatial organization of the objects"). When placing multiple inlets/outlets, ensure x-positions match the intended index order. **Never move inlet/outlet objects after parent connections exist** — indices recompute but parent cords stay on the old index, silently breaking wiring. `move_object` warns when targeting I/O objects. To read the current order: sort I/O objects from `get_objects_in_patch` by `patching_rect[0]` (x-coordinate).
+
 ---
 
 # MCP Tools Reference
