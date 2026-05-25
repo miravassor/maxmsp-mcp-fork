@@ -43,13 +43,15 @@ The M4L parameter metadata (`_parameter_shortname`, `_parameter_longname`, `_par
 
 **Fixed (2026-05-24, audit BUG 5):** `dirty` was always `false` after programmatic changes because `Wind.dirty` only tracks GUI edits. Added `mark_dirty()` helper that sends `thispatcher dirty` message after every write action. `dirty` now correctly reflects MCP modifications.
 
-### 1.7 ⚠️ OPEN — Subpatcher inlet/outlet indices re-map on reposition; parent cords silently shift
+### 1.7 ⚠️ PARTIALLY FIXED — Subpatcher inlet/outlet indices re-map on reposition; parent cords silently shift
 
 Inside a subpatcher (`p` or bpatcher), `inlet`/`outlet` objects are indexed by their **left-to-right x-position**, NOT creation order. When `move_object` is called on one of those objects, the indices recompute. The parent's existing cords attached to that wrapper box DO NOT follow the moved object — they stay attached to the same INDEX, which now means a different outlet object.
 
 Net effect: reordering outlets via `move_object` silently rotates which parent cords carry which payload. Symptoms: "the bpatcher is wired but everything goes to the wrong destination." Bit us twice this session — once when the outlets got positioned right-to-left initially, and again after a `move_object` that thought it was un-rotating things but actually shifted them by one position because the cords didn't follow.
 
-Fix candidates: (a) when `move_object` is called on an `inlet`/`outlet` inside a subpatcher with live parent cords, WARN that indices may shift; (b) on `move_object`, auto-rewrite the parent's cord src/dst indices so cords follow the moved object visually (hard — Max may not expose this); (c) document loudly in the skill.
+**Partial fix (2026-05-25):** `move_object` now detects inlet/outlet/inlet~/outlet~ maxclass and returns a `warning` field in the response explaining the index remapping risk. The move still executes — the warning tells the LLM to verify parent connections afterward. Official Max docs (cycling74.com) do not document this index-by-x-position behavior at all.
+
+Remaining: auto-rewriting parent cord indices to follow the moved object (option b) is not implemented — Max may not expose the parent's cord topology from inside the subpatcher.
 
 ### 1.8 ✅ FIXED — `set_object_attribute` silently no-ops for several patcher-level attributes
 

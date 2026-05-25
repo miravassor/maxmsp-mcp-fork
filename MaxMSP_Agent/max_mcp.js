@@ -1500,6 +1500,9 @@ function move_object(request_id, var_name, x, y) {
         return;
     }
 
+    var mc = obj.maxclass;
+    var is_io = (mc === "inlet" || mc === "outlet" || mc === "inlet~" || mc === "outlet~");
+
     // Get current rect to preserve width/height
     var rect = obj.rect;
     var width = rect[2] - rect[0];
@@ -1515,7 +1518,8 @@ function move_object(request_id, var_name, x, y) {
             "success": true,
             "varname": var_name,
             "old_position": [rect[0], rect[1]],
-            "new_position": [x, y]
+            "new_position": [x, y],
+            "warning": is_io ? "Moving " + mc + " objects changes their index order (determined by left-to-right x-position). Parent patchcords stay attached to the same index, not the same object. Verify parent connections after this move." : null
         }
     };
     outlet(1, "response", JSON.stringify(results, null, 0));

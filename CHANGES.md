@@ -574,3 +574,22 @@ PIP is scoped to its hosting **patcher hierarchy** (confirmed by docs: "Provides
 **Item closed permanently.** PIP is architecturally incompatible with our design (controller patcher separate from target patchers). The v8 nav fix did resolve the original hang, but PIP returns no useful data in our cross-patcher architecture. Direct `obj.getattr("_parameter_*")` remains the only viable approach.
 
 All spike code removed. No production code changes.
+
+---
+
+# Inlet/outlet index remapping warning (2026-05-25)
+
+## Problem (GAPS §1.7)
+
+Inside subpatchers, inlet/outlet objects are indexed by left-to-right x-position, not creation order. `move_object` on these objects recomputes indices, but parent cords stay attached to the old index — silently breaking wiring. Official docs do not document this behavior.
+
+## Fix
+
+`move_object` in `max_mcp.js` now checks `obj.maxclass` for `inlet`/`outlet`/`inlet~`/`outlet~`. If matched, the response includes a `warning` field explaining the index remapping risk. The move still executes — not blocked.
+
+## Files changed
+
+| File | Change |
+|------|--------|
+| `MaxMSP_Agent/max_mcp.js` `move_object()` | Added maxclass check + warning field in response |
+| `GAPS.md` §1.7 | Status → PARTIALLY FIXED |
