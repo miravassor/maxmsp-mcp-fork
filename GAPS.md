@@ -153,11 +153,13 @@ Two bugs in `collect_objects` (`max_mcp.js`):
 
 **Fixed (2026-05-23):** Added `live.comment` to the special-case list in `set_object_attribute` and added a missing `return` after the `set` call (previously fell through to "Attribute not found"). Pairs with §3.1.
 
-### 4.5 ✅ FIXED — Position no-op on existing `function` / `bpatcher`
+### 4.5 ⚠️ PARTIALLY VERIFIED — Position no-op on existing `function` / `bpatcher`
 
-`set_object_attribute` for `presentation_rect` / `patching_rect` / `presentation_position` / `patching_position` on existing `function` or `bpatcher` objects silently no-ops. This is a Max behavior, not an MCP bug.
+Originally reported: `set_object_attribute` for `presentation_rect` / `patching_rect` / `presentation_position` / `patching_position` on `function` or `bpatcher` objects silently no-ops.
 
-**Fixed (2026-05-25):** `set_object_attribute` now compares old_value vs new_value after setattr/setboxattr. If the value didn't change but differs from the requested value, the response includes a `warning` field: "Attribute unchanged after setattr... For position, use move_object instead." Generic detection — catches any no-op, not just function/bpatcher.
+**Re-tested (2026-05-25):** `patching_rect` and `patching_position` work correctly on `function` objects (value changes and persists). `presentation_rect` no-ops, but only when `presentation: 0` — this is expected Max behavior (presentation attrs are inert when object isn't in presentation mode), not a function-specific bug. Could not reproduce the original `patching_rect` no-op — may have been Max-version-specific or a different scenario.
+
+**Mitigation (2026-05-25):** `set_object_attribute` now compares old_value vs new_value after setattr/setboxattr. If unchanged but differs from requested value, response includes a `warning` field. Generic — catches any no-op regardless of cause.
 
 ---
 
