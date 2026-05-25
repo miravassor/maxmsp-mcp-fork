@@ -153,11 +153,11 @@ Two bugs in `collect_objects` (`max_mcp.js`):
 
 **Fixed (2026-05-23):** Added `live.comment` to the special-case list in `set_object_attribute` and added a missing `return` after the `set` call (previously fell through to "Attribute not found"). Pairs with §3.1.
 
-### 4.5 🔄 OPEN — Position no-op on existing `function` / `bpatcher`
+### 4.5 ✅ FIXED — Position no-op on existing `function` / `bpatcher`
 
-Memory `[feedback-maxmcp-position-quirk]` flags that `set_object_attribute` for `presentation_rect` / `patching_rect` / `presentation_position` / `patching_position` on existing `function` or `bpatcher` objects silently no-ops. The call reports success but the value doesn't update in Max.
+`set_object_attribute` for `presentation_rect` / `patching_rect` / `presentation_position` / `patching_position` on existing `function` or `bpatcher` objects silently no-ops. This is a Max behavior, not an MCP bug.
 
-Note: this is a Max behavior, not an MCP bug. The MCP could detect by reading back and warning. Workaround already documented: use `move_object` (which writes via `obj.rect`) or `recreate_with_args` instead of `set_object_attribute`.
+**Fixed (2026-05-25):** `set_object_attribute` now compares old_value vs new_value after setattr/setboxattr. If the value didn't change but differs from the requested value, the response includes a `warning` field: "Attribute unchanged after setattr... For position, use move_object instead." Generic detection — catches any no-op, not just function/bpatcher.
 
 ---
 

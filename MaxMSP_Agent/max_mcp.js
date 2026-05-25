@@ -745,7 +745,11 @@ function set_object_attribute(request_id, varname, attr_name, attr_value) {
         obj.setattr(attr_name, attr_value);
         var new_val;
         try { new_val = obj.getattr(attr_name); } catch (e) { new_val = null; }
-        var r = {"request_id": request_id, "results": {"success": true, "varname": varname, "attr_name": attr_name, "old_value": old_val, "new_value": new_val, "method": "setattr"}};
+        var warning = null;
+        if (JSON.stringify(old_val) === JSON.stringify(new_val) && JSON.stringify(old_val) !== JSON.stringify(attr_value)) {
+            warning = "Attribute unchanged after setattr (old == new != requested). This object may not support setting '" + attr_name + "' via setattr. For position, use move_object instead.";
+        }
+        var r = {"request_id": request_id, "results": {"success": true, "varname": varname, "attr_name": attr_name, "old_value": old_val, "new_value": new_val, "method": "setattr", "warning": warning}};
         outlet(1, "response", JSON.stringify(r, null, 0));
         return;
     }
@@ -757,7 +761,11 @@ function set_object_attribute(request_id, varname, attr_name, attr_value) {
             obj.setboxattr(attr_name, attr_value);
             var new_val;
             try { new_val = obj.getboxattr(attr_name); } catch (e) { new_val = null; }
-            var r = {"request_id": request_id, "results": {"success": true, "varname": varname, "attr_name": attr_name, "old_value": old_val, "new_value": new_val, "method": "setboxattr"}};
+            var warning = null;
+            if (JSON.stringify(old_val) === JSON.stringify(new_val) && JSON.stringify(old_val) !== JSON.stringify(attr_value)) {
+                warning = "Attribute unchanged after setboxattr (old == new != requested). This object may not support setting '" + attr_name + "' via setboxattr. For position, use move_object instead.";
+            }
+            var r = {"request_id": request_id, "results": {"success": true, "varname": varname, "attr_name": attr_name, "old_value": old_val, "new_value": new_val, "method": "setboxattr", "warning": warning}};
             outlet(1, "response", JSON.stringify(r, null, 0));
             return;
         }
