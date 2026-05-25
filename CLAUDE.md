@@ -58,7 +58,6 @@ Claude Code ←—MCP—→ server.py ←—Socket.IO:5002—→ max_mcp_node.js
 
 `server.py` uses two patterns for Max communication:
 
-- **`send_command(payload)`** — fire-and-forget. No longer used by any MCP tool (all upgraded to request/response). Kept for potential future low-risk operations.
 - **`send_request(payload, timeout)`** — request/response with futures. Used by **all** MCP tools. Each request gets a UUID; the Max side emits a `response` event matched by `request_id`. Returns structured `{success, ..., error?}`.
 
 ### Cross-engine forwarding (classic js → v8)
@@ -69,7 +68,7 @@ Claude Code ←—MCP—→ server.py ←—Socket.IO:5002—→ max_mcp_node.js
 
 ### Adding a new MCP tool — four-file template
 
-1. **`server.py`** — `@mcp.tool() async def name(ctx, args...)`. Build `payload = {"action": "...", ...}`, call `send_request` (or `send_command`), return response.
+1. **`server.py`** — `@mcp.tool() async def name(ctx, args...)`. Build `payload = {"action": "...", ...}`, call `send_request`, return response.
 2. **`max_mcp.js`** — `case "action_name":` in the `anything()` dispatcher. Inline the logic or forward to v8. If the action modifies the patcher, add it to the `WRITE_ACTIONS` table (triggers `mark_dirty()` automatically).
 3. **`max_mcp_v8_add_on.js`** — if v8-routed: `case "action_name":` in dispatcher + implementing function. Emit via `outlet(1, "response", split_long_string(...))`.
 4. **Documentation** — README tool table, CLAUDE.md if user-facing, CHANGES.md for iteration tracking.

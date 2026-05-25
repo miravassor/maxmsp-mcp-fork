@@ -43,11 +43,6 @@ class MaxMSPConnection:
             if fut and not fut.done():
                 fut.set_result(data.get("results"))
 
-    async def send_command(self, cmd: dict):
-        """Send a command to MaxMSP."""
-        await self.sio.emit("command", cmd, namespace=self.namespace)
-        logging.info(f"Sent to MaxMSP: {cmd}")
-
     async def send_request(self, payload: dict, timeout=2.0):
         """Send a fetch request to MaxMSP."""
         request_id = str(uuid.uuid4())
