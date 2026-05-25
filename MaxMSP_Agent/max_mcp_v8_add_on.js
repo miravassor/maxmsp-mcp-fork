@@ -59,11 +59,9 @@ function anything() {
             chunk_expected = 0;
             break;
         case "autofit_v8":
-            if (arguments.length < 1) {
-                post("autofit_v8: need varname arg\n");
-                return;
+            if (arguments.length >= 2) {
+                autofit_v8(arguments[0], arguments[1]);
             }
-            autofit_v8(arguments[0]);
             break;
         case "complete_encapsulate":
             if (arguments.length < 1) {
@@ -611,43 +609,45 @@ function complete_encapsulate(data_str) {
     post("Encapsulated " + objects_info.length + " objects into " + subpatcher_varname + "\n");
 }
 
-function autofit_v8(var_name) {
+function autofit_v8(request_id, var_name) {
     var p = current_patcher;
     var obj = p.getnamed(var_name);
 
     if (!obj) {
-        post("autofit_v8: Object not found: " + var_name + "\n");
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Object not found: " + var_name}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
         return;
     }
 
-    // Hard skip for inlets/outlets - never resize these
     var mc = obj.maxclass;
-    if (mc === "inlet" || mc === "outlet") {
+    if (mc === "inlet" || mc === "outlet" || mc === "inlet~" || mc === "outlet~") {
+        var r = {"request_id": request_id, "results": {"success": true, "varname": var_name, "skipped": "inlet/outlet"}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
         return;
     }
 
-    // Skip UI objects that should keep default sizes
     var skip_classes = ["toggle", "button", "slider", "dial", "number", "flonum",
                         "kslider", "panel", "live.dial", "live.slider", "live.toggle",
                         "live.button", "live.numbox", "live.menu", "meter~", "spectroscope~",
                         "gain~", "levelmeter~", "multislider", "matrixctrl", "nodes"];
     if (skip_classes.indexOf(mc) !== -1) {
-        return; // Keep default size
+        var r = {"request_id": request_id, "results": {"success": true, "varname": var_name, "skipped": "ui_object"}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
     }
 
-    // Message boxes get fixed 70px width
-    if (obj.maxclass === "message") {
+    if (mc === "message") {
         var rect = obj.rect;
         var current_width = rect[2] - rect[0];
         var current_height = rect[3] - rect[1];
         if (current_width !== 70) {
             obj.rect = [rect[0], rect[1], rect[0] + 70, rect[1] + current_height];
-            post("autofit_v8 " + var_name + ": " + current_width + "px -> 70px (message)\n");
         }
+        var r = {"request_id": request_id, "results": {"success": true, "varname": var_name, "width": 70}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
         return;
     }
 
-    // Auto-size: objects and comments
     var text = obj.boxtext;
     if (!text) {
         text = obj.maxclass;
@@ -657,17 +657,16 @@ function autofit_v8(var_name) {
     var current_width = rect[2] - rect[0];
     var current_height = rect[3] - rect[1];
 
-    // Calculate width using character lookup + box padding
     var box_padding = 16;
     var min_width = 32;
     var text_width = get_text_width(text);
     var calculated_width = Math.max(min_width, text_width + box_padding);
 
-    // Only resize if significantly different
     if (Math.abs(current_width - calculated_width) > 3) {
         obj.rect = [rect[0], rect[1], rect[0] + calculated_width, rect[1] + current_height];
-        post("autofit_v8 " + var_name + ": " + current_width + "px -> " + calculated_width + "px (" + text + ")\n");
     }
+    var r = {"request_id": request_id, "results": {"success": true, "varname": var_name, "width": calculated_width}};
+    outlet(1, "response", JSON.stringify(r, null, 0));
 }
 
 // ========================================

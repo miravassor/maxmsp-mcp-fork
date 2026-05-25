@@ -58,8 +58,8 @@ Claude Code ←—MCP—→ server.py ←—Socket.IO:5002—→ max_mcp_node.js
 
 `server.py` uses two patterns for Max communication:
 
-- **`send_command(payload)`** — fire-and-forget. Used for low-risk write operations (`set_message_text`, `send_bang_to_object`, `create_subpatcher`, subpatcher navigation, `add_subpatcher_io`, `autofit_existing`). No response expected. These cannot report errors — verify with a read tool after critical operations.
-- **`send_request(payload, timeout)`** — request/response with futures. Used for reads and validated writes (`add_object`, `connect/disconnect`, `remove_max_object`, `set_object_attribute`, all parameter tools, etc.). Each request gets a UUID; the Max side emits a `response` event matched by `request_id`. Returns structured `{success, ..., error?}`.
+- **`send_command(payload)`** — fire-and-forget. No longer used by any MCP tool (all upgraded to request/response). Kept for potential future low-risk operations.
+- **`send_request(payload, timeout)`** — request/response with futures. Used by **all** MCP tools. Each request gets a UUID; the Max side emits a `response` event matched by `request_id`. Returns structured `{success, ..., error?}`.
 
 ### Cross-engine forwarding (classic js → v8)
 

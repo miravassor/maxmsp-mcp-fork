@@ -193,44 +193,44 @@ function anything() {
             }
             break;
         case "set_message_text":
-            if (data.varname && data.new_text) {
-                set_message_text(data.varname, data.new_text);
+            if (data.request_id && data.varname && data.new_text) {
+                set_message_text(data.request_id, data.varname, data.new_text);
             }
             break;
         case "send_message_to_object":
-            if (data.varname && data.message) {
-                send_message_to_object(data.varname, data.message);
+            if (data.request_id && data.varname && data.message) {
+                send_message_to_object(data.request_id, data.varname, data.message);
             }
             break;
         case "send_bang_to_object":
-            if (data.varname) {
-                send_bang_to_object(data.varname);
+            if (data.request_id && data.varname) {
+                send_bang_to_object(data.request_id, data.varname);
             }
             break;
         case "set_number":
-            if (data.varname && data.num) {
-                set_number(data.varname, data.num);
+            if (data.request_id && data.varname && data.num !== undefined) {
+                set_number(data.request_id, data.varname, data.num);
             }
             break;
         case "create_subpatcher":
-            if (data.position && data.varname) {
-                create_subpatcher(data.position[0], data.position[1], data.name || "subpatch", data.varname);
-            } else {
-                outlet(0, "error", "Missing position or varname for create_subpatcher");
+            if (data.request_id && data.position && data.varname) {
+                create_subpatcher(data.request_id, data.position[0], data.position[1], data.name || "subpatch", data.varname);
             }
             break;
         case "enter_subpatcher":
-            if (data.varname) {
-                enter_subpatcher(data.varname);
-            } else {
-                outlet(0, "error", "Missing varname for enter_subpatcher");
+            if (data.request_id && data.varname) {
+                enter_subpatcher(data.request_id, data.varname);
             }
             break;
         case "exit_subpatcher":
-            exit_subpatcher();
+            if (data.request_id) {
+                exit_subpatcher(data.request_id);
+            }
             break;
         case "enter_parent_patcher":
-            enter_parent_patcher();
+            if (data.request_id) {
+                enter_parent_patcher(data.request_id);
+            }
             break;
         case "list_open_patchers":
             if (data.request_id) {
@@ -282,10 +282,8 @@ function anything() {
             }
             break;
         case "add_subpatcher_io":
-            if (data.io_type && data.position && data.varname) {
-                add_subpatcher_io(data.position[0], data.position[1], data.io_type, data.varname, data.comment || "");
-            } else {
-                outlet(0, "error", "Missing io_type, position, or varname for add_subpatcher_io");
+            if (data.request_id && data.io_type && data.position && data.varname) {
+                add_subpatcher_io(data.request_id, data.position[0], data.position[1], data.io_type, data.varname, data.comment || "");
             }
             break;
         case "get_object_connections":
@@ -310,10 +308,8 @@ function anything() {
             }
             break;
         case "autofit_existing":
-            if (data.varname) {
-                autofit_existing(data.varname);
-            } else {
-                outlet(0, "error", "Missing varname for autofit_existing");
+            if (data.request_id && data.varname) {
+                autofit_existing(data.request_id, data.varname);
             }
             break;
         case "rename_object":
@@ -770,35 +766,45 @@ function set_object_attribute(request_id, varname, attr_name, attr_value) {
     outlet(1, "response", JSON.stringify(r, null, 0));
 }
 
-function set_message_text(varname, new_text) {
+function set_message_text(request_id, varname, new_text) {
     var obj = current_patcher.getnamed(varname);
-    if (obj) {
-        if (obj.maxclass == "message") {
-            obj.message("set", new_text);
-        } else {
-            post("Object is not a message box: " + varname);
-        }
-    } else {
-        post("Object not found: " + varname);
+    if (!obj) {
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Object not found: " + varname}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
     }
+    if (obj.maxclass != "message") {
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Object is not a message box (maxclass: " + obj.maxclass + ")", "varname": varname}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
+    }
+    obj.message("set", new_text);
+    var r = {"request_id": request_id, "results": {"success": true, "varname": varname}};
+    outlet(1, "response", JSON.stringify(r, null, 0));
 }
 
-function send_message_to_object(varname, message) {
+function send_message_to_object(request_id, varname, message) {
     var obj = current_patcher.getnamed(varname);
-    if (obj) {
-        obj.message(message);
-    } else {
-        post("Object not found: " + varname);
+    if (!obj) {
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Object not found: " + varname}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
     }
+    obj.message(message);
+    var r = {"request_id": request_id, "results": {"success": true, "varname": varname, "message": message}};
+    outlet(1, "response", JSON.stringify(r, null, 0));
 }
 
-function send_bang_to_object(varname) {
+function send_bang_to_object(request_id, varname) {
     var obj = current_patcher.getnamed(varname);
-    if (obj) {
-        obj.message("bang");
-    } else {
-        post("Object not found: " + varname);
+    if (!obj) {
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Object not found: " + varname}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
     }
+    obj.message("bang");
+    var r = {"request_id": request_id, "results": {"success": true, "varname": varname}};
+    outlet(1, "response", JSON.stringify(r, null, 0));
 }
 
 function set_text_in_comment(varname, text) {
@@ -814,94 +820,95 @@ function set_text_in_comment(varname, text) {
     }
 }
 
-function set_number(varname, num) {
+function set_number(request_id, varname, num) {
     var obj = current_patcher.getnamed(varname);
-    if (obj) {
-        obj.message("set", num);
-    } else {
-        post("Object not found: " + varname);
+    if (!obj) {
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Object not found: " + varname}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
+        return;
     }
+    obj.message("set", num);
+    var r = {"request_id": request_id, "results": {"success": true, "varname": varname, "num": num}};
+    outlet(1, "response", JSON.stringify(r, null, 0));
 }
 
 // ========================================
 // Subpatcher navigation functions:
 
-function create_subpatcher(x, y, name, var_name) {
+function create_subpatcher(request_id, x, y, name, var_name) {
     var new_obj = current_patcher.newdefault(x, y, "patcher", name);
     new_obj.varname = var_name;
+    var verify = current_patcher.getnamed(var_name);
+    var r = {"request_id": request_id, "results": {"success": !!verify, "varname": var_name, "name": name}};
+    outlet(1, "response", JSON.stringify(r, null, 0));
     post("Created subpatcher: " + var_name + " (" + name + ")\n");
 }
 
-function enter_subpatcher(var_name) {
+function enter_subpatcher(request_id, var_name) {
     var obj = current_patcher.getnamed(var_name);
     if (!obj) {
-        post("Object not found: " + var_name + "\n");
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Object not found: " + var_name}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
         return;
     }
 
     var subpatch = obj.subpatcher();
     if (!subpatch) {
-        post("Object is not a subpatcher: " + var_name + "\n");
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Object is not a subpatcher: " + var_name}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
         return;
     }
 
-    // Push current context onto stack
     patcher_stack.push({
         patcher: current_patcher,
         name: var_name
     });
 
-    // Navigate into subpatcher
     current_patcher = subpatch;
-
-    // Reset preflight check - new context requires new avoid rect check
     avoid_rect_called = false;
-
-    // Sync V8 add-on navigation
     outlet(2, "nav_enter_subpatcher", var_name);
 
+    var r = {"request_id": request_id, "results": {"success": true, "varname": var_name, "depth": patcher_stack.length}};
+    outlet(1, "response", JSON.stringify(r, null, 0));
     post("Entered subpatcher: " + var_name + " (depth: " + patcher_stack.length + ")\n");
 }
 
-function exit_subpatcher() {
+function exit_subpatcher(request_id) {
     if (patcher_stack.length == 0) {
-        post("Already at root patcher\n");
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Already at root patcher"}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
         return;
     }
 
     var context = patcher_stack.pop();
     current_patcher = context.patcher;
-
-    // Reset preflight check - returning to parent context requires new avoid rect check
     avoid_rect_called = false;
-
-    // Sync V8 add-on navigation
     outlet(2, "nav_exit_subpatcher");
 
+    var r = {"request_id": request_id, "results": {"success": true, "depth": patcher_stack.length}};
+    outlet(1, "response", JSON.stringify(r, null, 0));
     post("Exited to parent patcher (depth: " + patcher_stack.length + ")\n");
 }
 
-function enter_parent_patcher() {
+function enter_parent_patcher(request_id) {
     var parent = current_patcher.parentpatcher;
     if (!parent) {
-        post("No parent patcher available - already at top level\n");
+        var r = {"request_id": request_id, "results": {"success": false, "error": "No parent patcher available — already at top level"}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
         return;
     }
 
-    // Push current context onto stack so we can return with exit_subpatcher
     patcher_stack.push({
         patcher: current_patcher,
         name: "_parent"
     });
 
     current_patcher = parent;
-
-    // Reset preflight check
     avoid_rect_called = false;
-
-    // Sync V8 add-on navigation
     outlet(2, "nav_enter_parent");
 
+    var r = {"request_id": request_id, "results": {"success": true, "depth": patcher_stack.length}};
+    outlet(1, "response", JSON.stringify(r, null, 0));
     post("Entered parent patcher (depth: " + patcher_stack.length + ")\n");
 }
 
@@ -1181,9 +1188,10 @@ function get_patcher_context(request_id) {
     outlet(1, "response", JSON.stringify(results, null, 0));
 }
 
-function add_subpatcher_io(x, y, io_type, var_name, comment) {
+function add_subpatcher_io(request_id, x, y, io_type, var_name, comment) {
     if (io_type != "inlet" && io_type != "outlet" && io_type != "inlet~" && io_type != "outlet~") {
-        post("Invalid io_type: " + io_type + ". Use inlet, outlet, inlet~, or outlet~\n");
+        var r = {"request_id": request_id, "results": {"success": false, "error": "Invalid io_type: " + io_type + ". Use inlet, outlet, inlet~, or outlet~"}};
+        outlet(1, "response", JSON.stringify(r, null, 0));
         return;
     }
 
@@ -1194,6 +1202,9 @@ function add_subpatcher_io(x, y, io_type, var_name, comment) {
         new_obj.setattr("comment", comment);
     }
 
+    var verify = current_patcher.getnamed(var_name);
+    var r = {"request_id": request_id, "results": {"success": !!verify, "varname": var_name, "io_type": io_type}};
+    outlet(1, "response", JSON.stringify(r, null, 0));
     post("Created " + io_type + ": " + var_name + "\n");
 }
 
@@ -1546,9 +1557,8 @@ function move_object(request_id, var_name, x, y) {
     post("Moved " + var_name + " to [" + x + ", " + y + "]\n");
 }
 
-function autofit_existing(var_name) {
-    // Route to v8 add-on which has access to obj.boxtext
-    outlet(2, "autofit_v8", var_name);
+function autofit_existing(request_id, var_name) {
+    outlet(2, "autofit_v8", request_id, var_name);
 }
 
 // ========================================

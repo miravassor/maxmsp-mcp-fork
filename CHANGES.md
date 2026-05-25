@@ -591,5 +591,62 @@ Inside subpatchers, inlet/outlet objects are indexed by left-to-right x-position
 
 | File | Change |
 |------|--------|
-| `MaxMSP_Agent/max_mcp.js` `move_object()` | Added maxclass check + warning field in response |
+| `MaxMSP_Agent/max_mcp.js` `move_object()` | Added maxclass check + warning field + io_order index map in response |
 | `GAPS.md` §1.7 | Status → PARTIALLY FIXED |
+
+---
+
+# Iteration 7 — Upgrade all remaining fire-and-forget tools to request/response (2026-05-25)
+
+## Goal
+
+Upgrade the last 10 `send_command` (fire-and-forget) tools to `send_request` (request/response with validation). After this, zero MCP tools use fire-and-forget — all return structured `{success, error}` responses.
+
+## Tools upgraded
+
+| Tool | Key validation added |
+|------|---------------------|
+| `set_message_text` | Object exists AND `maxclass === "message"` |
+| `send_bang_to_object` | Object exists |
+| `send_messages_to_object` | Object exists |
+| `set_number` | Object exists |
+| `create_subpatcher` | Verify created via `getnamed` readback |
+| `enter_subpatcher` | Object exists + has `subpatcher()` |
+| `exit_subpatcher` | `patcher_stack.length > 0` |
+| `enter_parent_patcher` | `parentpatcher` exists |
+| `add_subpatcher_io` | Valid io_type + verify created |
+| `autofit_existing` | Object exists (v8 side) |
+
+## Files changed
+
+### `server.py`
+All 10 tools: `send_command(cmd)` → `send_request(payload, timeout=5.0)` + `return response`. Zero `send_command` calls remain (only the method definition).
+
+### `MaxMSP_Agent/max_mcp.js`
+All 10 dispatcher cases: added `data.request_id` requirement.
+All 10 functions: added `request_id` parameter, object validation, structured response via `outlet(1, "response", ...)`.
+
+### `MaxMSP_Agent/max_mcp_v8_add_on.js`
+`autofit_v8`: added `request_id` parameter, object-not-found error, structured response for all code paths (skipped UI, skipped inlet/outlet, message fixed-width, auto-sized).
+
+### `CLAUDE.md`
+Updated `send_command` description: no longer used by any MCP tool.
+
+## Test status
+
+| # | Test | Result |
+|---|------|--------|
+| 1 | `set_message_text` on non-message (live.dial) | ✅ `error: "Object is not a message box"` |
+| 2 | `send_bang_to_object` nonexistent | ✅ `error: "Object not found"` |
+| 3 | `set_number` nonexistent | ✅ `error: "Object not found"` |
+| 4 | `exit_subpatcher` at root | ✅ `error: "Already at root patcher"` |
+| 5 | `enter_subpatcher` on non-subpatcher | ✅ `error: "Object is not a subpatcher"` |
+| 6 | `enter_subpatcher` nonexistent | ✅ `error: "Object not found"` |
+| 7 | `set_number` happy path | ✅ `success: true, num: 75` |
+| 8 | `send_bang_to_object` happy path | ✅ `success: true` |
+| 9 | `send_messages_to_object` happy + error | ✅ both paths |
+| 10 | `enter/exit_subpatcher` depth tracking | ✅ depth 1 → 0 |
+| 11 | `autofit_existing` UI skip + nonexistent | ✅ `skipped: "ui_object"` + error |
+| 12 | `create_subpatcher` + `add_subpatcher_io` | ✅ both `success: true` |
+| 13 | `add_subpatcher_io` invalid io_type | ✅ `error: "Invalid io_type"` |
+| 14 | `enter_parent_patcher` at top level | ✅ `error: "No parent patcher available"` |

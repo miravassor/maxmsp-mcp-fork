@@ -559,10 +559,9 @@ async def set_message_text(
             }
 
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "set_message_text"}
-    kwargs = {"varname": varname, "new_text": text_list}
-    cmd.update(kwargs)
-    await maxmsp.send_command(cmd)
+    payload = {"action": "set_message_text", "varname": varname, "new_text": text_list}
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 @mcp.tool()
@@ -573,10 +572,9 @@ async def send_bang_to_object(ctx: Context, varname: str):
         varname (str): Variable name of the object to be banged.
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "send_bang_to_object"}
-    kwargs = {"varname": varname}
-    cmd.update(kwargs)
-    await maxmsp.send_command(cmd)
+    payload = {"action": "send_bang_to_object", "varname": varname}
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 @mcp.tool()
@@ -599,10 +597,9 @@ async def send_messages_to_object(
         message (list): A list of messages to be sent to the object.
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "send_message_to_object"}
-    kwargs = {"varname": varname, "message": message}
-    cmd.update(kwargs)
-    await maxmsp.send_command(cmd)
+    payload = {"action": "send_message_to_object", "varname": varname, "message": message}
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 @mcp.tool()
@@ -618,12 +615,10 @@ async def set_number(
         varname (str): Variable name of the comment object.
         num (float): Value to be set for the object.
     """
-
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "set_number"}
-    kwargs = {"varname": varname, "num": num}
-    cmd.update(kwargs)
-    await maxmsp.send_command(cmd)
+    payload = {"action": "set_number", "varname": varname, "num": num}
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 @mcp.tool()
@@ -909,14 +904,14 @@ async def create_subpatcher(
         name (str): Display name shown in the subpatcher title bar.
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "create_subpatcher"}
-    kwargs = {
+    payload = {
+        "action": "create_subpatcher",
         "position": position,
         "varname": varname,
         "name": name,
     }
-    cmd.update(kwargs)
-    await maxmsp.send_command(cmd)
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 @mcp.tool()
@@ -932,10 +927,9 @@ async def enter_subpatcher(ctx: Context, varname: str):
         varname (str): Variable name of the subpatcher object to enter.
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "enter_subpatcher"}
-    kwargs = {"varname": varname}
-    cmd.update(kwargs)
-    await maxmsp.send_command(cmd)
+    payload = {"action": "enter_subpatcher", "varname": varname}
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 @mcp.tool()
@@ -945,8 +939,9 @@ async def exit_subpatcher(ctx: Context):
     If already at root level, this has no effect.
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "exit_subpatcher"}
-    await maxmsp.send_command(cmd)
+    payload = {"action": "exit_subpatcher"}
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 @mcp.tool()
@@ -960,8 +955,9 @@ async def enter_parent_patcher(ctx: Context):
     Use exit_subpatcher to return back down.
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "enter_parent_patcher"}
-    await maxmsp.send_command(cmd)
+    payload = {"action": "enter_parent_patcher"}
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 @mcp.tool()
@@ -1095,15 +1091,15 @@ async def add_subpatcher_io(
         comment (str): Optional assistance text shown when hovering over the inlet/outlet.
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "add_subpatcher_io"}
-    kwargs = {
+    payload = {
+        "action": "add_subpatcher_io",
         "position": position,
         "io_type": io_type,
         "varname": varname,
         "comment": comment,
     }
-    cmd.update(kwargs)
-    await maxmsp.send_command(cmd)
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 # ========================================
@@ -1196,8 +1192,9 @@ async def autofit_existing(
         varname (str): Variable name of the object to resize.
     """
     maxmsp = ctx.request_context.lifespan_context.get("maxmsp")
-    cmd = {"action": "autofit_existing", "varname": varname}
-    await maxmsp.send_command(cmd)
+    payload = {"action": "autofit_existing", "varname": varname}
+    response = await maxmsp.send_request(payload, timeout=5.0)
+    return response
 
 
 @mcp.tool()

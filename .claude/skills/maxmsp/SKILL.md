@@ -128,41 +128,37 @@ Navigation stack tracks depth. `get_patcher_context()` returns current depth, pa
 | `list_parameters()` | All M4L parameters in current patcher |
 | `get_parameter_info(var)` | M4L parameter metadata for one object |
 
-## Write — with response
+## Write
+
+All write tools return structured `{success, error}` responses.
 
 | Tool | Purpose |
 |------|---------|
 | `add_max_object(pos, type, var, args)` | Create object |
-| `move_object(var, x, y)` | Reposition (returns old/new position) |
+| `move_object(var, x, y)` | Reposition (returns old/new position + io_order for inlets/outlets) |
 | `recreate_with_args(var, args)` | Change creation args, preserve connections |
 | `rename_object(var, new_var)` | Rename varname (collision-checked) |
-| `save_patcher()` | Save to disk (Cmd+S equivalent) |
-| `set_presentation_mode(0\|1)` | Toggle patching/presentation view |
-| `switch_to_patcher(name)` | Navigate to any open patcher |
-| `set_parameter_property(var, key, value)` | Write M4L parameter attribute |
-| `encapsulate(varnames, name, var)` | Move objects into new subpatcher |
-| `clear_console_buffer()` | Clear internal console ring buffer |
-
-## Write — fire-and-forget (no response)
-
-These return no output. **Verify with a read tool after** if correctness matters.
-
-| Tool | Purpose |
-|------|---------|
-| `remove_max_object(var)` | Delete object |
-| `connect_max_objects(src, out, dst, in)` | Connect two objects |
-| `disconnect_max_objects(src, out, dst, in)` | Disconnect two objects |
-| `set_object_attribute(var, attr, value)` | Set any attribute |
-| `set_message_text(var, list)` | Set message box content |
+| `remove_max_object(var)` | Delete object (verified via readback) |
+| `connect_max_objects(src, out, dst, in)` | Connect two objects (verified via patchcords) |
+| `disconnect_max_objects(src, out, dst, in)` | Disconnect two objects (verified via patchcords) |
+| `set_object_attribute(var, attr, value)` | Set any attribute (returns old/new value) |
+| `set_message_text(var, list)` | Set message box content (validates maxclass) |
 | `send_bang_to_object(var)` | Send bang |
 | `send_messages_to_object(var, msg)` | Send arbitrary message |
 | `set_number(var, num)` | Set number/slider/dial value |
-| `create_subpatcher(pos, var, name)` | Create p object |
-| `enter_subpatcher(var)` | Navigate into subpatcher |
-| `exit_subpatcher()` | Return to parent |
-| `enter_parent_patcher()` | Navigate above root (for abstractions) |
-| `add_subpatcher_io(pos, type, var, comment)` | Add inlet/outlet inside subpatcher |
+| `create_subpatcher(pos, var, name)` | Create p object (verified via readback) |
+| `enter_subpatcher(var)` | Navigate into subpatcher (returns depth) |
+| `exit_subpatcher()` | Return to parent (returns depth) |
+| `enter_parent_patcher()` | Navigate above root (returns depth) |
+| `add_subpatcher_io(pos, type, var, comment)` | Add inlet/outlet (validates io_type) |
 | `autofit_existing(var)` | Auto-size object to fit text |
+| `save_patcher()` | Save to disk (Cmd+S equivalent) |
+| `set_presentation_mode(0\|1)` | Toggle patching/presentation view |
+| `switch_to_patcher(name)` | Navigate to any open patcher |
+| `set_parameter_property(var, key, value)` | Write single M4L parameter attribute |
+| `configure_parameter(var, properties)` | Write multiple M4L parameter attrs (smart ordering) |
+| `encapsulate(varnames, name, var)` | Move objects into new subpatcher |
+| `clear_console_buffer()` | Clear internal console ring buffer |
 | `clear_max_console()` | Clear visual console (buffer untouched) |
 
 ---
@@ -202,4 +198,4 @@ After writing, call `save_patcher()` to persist changes to the .amxd file.
 
 **`patching_rect` format**: Both `get_objects_in_patch()` and `get_object_attributes()` return `patching_rect` as `[left, top, width, height]`.
 
-**Fire-and-forget commands**: `connect_max_objects`, `remove_max_object`, `set_object_attribute`, etc. return no output and cannot report errors. After critical operations, verify with `get_object_connections()` or `get_object_attributes()`.
+**All write tools return responses** with `{success, error}`. No fire-and-forget tools remain.
