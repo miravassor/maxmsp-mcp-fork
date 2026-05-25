@@ -307,11 +307,11 @@ In Max's New Object box, typing `jpatcher` or `bpatcher` instantiates **the same
 
 Bit us across two sessions: a `jpatcher` created without `@embed` looked indistinguishable from a working bpatcher but had no inner patcher to enter/edit.
 
-### 5.10 `_parameter_modmode` values 1-3 silently reset to 0 in standalone Max
+### 5.10 🚫 REFERENCE ONLY — `_parameter_modmode` values 1-3 not settable via `setattr`
 
-Setting `_parameter_modmode` via `setattr` to 1 (Unipolar), 2 (Bipolar), or 3 (Additive) silently resets to 0 (None). Only 0 and 4 (Absolute) persist. Likely requires Ableton Live context for modulation-dependent modes.
+Setting `_parameter_modmode` via `setattr` to 1 (Unipolar), 2 (Bipolar), or 3 (Additive) silently resets to 0 (None). Only 0 (None) and 4 (Absolute) persist. The `setattr` call doesn't throw — it accepts the value but `getattr` reads back 0.
 
-Verified 2026-05-24 on `live.dial` in `sandbox.amxd` (standalone Max 9). The `setattr` call doesn't throw — it accepts the value but `getattr` reads back 0.
+**Verified in both standalone Max AND Ableton Live** (2026-05-25 on `live.dial` in `sandbox.amxd`). This is NOT a standalone-vs-Live context issue — it's a `setattr` API limitation. The Ableton M4L production guidelines only describe setting Clip Modulation Mode via the Inspector, never programmatically. These modes can only be configured through the Max Inspector GUI.
 
 ### 5.9b `set_parameter_property("_parameter_initial", x)` may silently clamp to range floor
 
